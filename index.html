@@ -127,36 +127,77 @@
         const statusEl = document.getElementById('status');
         
         async function startMatching() {
-            console.log("Step 3: Starting Match, My ID:", myId);
-            const waitingRef = ref(db, 'waiting_pool');
+        console.log("Step 3: Starting Match, My ID:", myId);
+        const waitingRef = ref(db, 'waiting_pool');
+        
+        try {
+            const snapshot = await get(waitingRef);
+            console.log("Step 4: Database Connected");
             
-            try {
-                const snapshot = await get(waitingRef);
-                console.log("Step 4: Database Connected");
+            if (snapshot.exists()) {
+                console.log("Step 5: Found someone waiting...");
+                const waiters = snapshot.val();
+                const opponentId = Object.keys(waiters)[0];
+                currentRoomId = waiters[opponentId].roomId;
                 
-                if (snapshot.exists()) {
-                    console.log("Step 5: Found someone waiting...");
-                    const waiters = snapshot.val();
-                    const opponentId = Object.keys(waiters)[0];
-                    currentRoomId = waiters[opponentId].roomId;
-                    await remove(ref(db, `waiting_pool/${opponentId}`));
-                    initChat(currentRoomId);
-                } else {
-                    console.log("Step 5: No one waiting, creating pool entry...");
-                    currentRoomId = `room_${myId}`;
-                    await set(ref(db, `waiting_pool/${myId}`), { roomId: currentRoomId });
-                    statusEl.innerText = "Status: Waiting for stranger...";
-                    
-                    const roomRef = ref(db, `rooms/${currentRoomId}/messages`);
-                    onValue(roomRef, (snap) => {
-                        if (snap.exists()) initChat(currentRoomId);
-                    });
-                }
-            } catch (e) {
-                console.error("Database Error:", e);
-                statusEl.innerText = "Status: Database Error (Check Rules)";
+                // 1. 先從等待區移除對方
+                await remove(ref(db, `waiting_pool/${opponentId}`));
+                
+                // 2. 【關鍵】發送一個隱形的系統信號，讓對方知道有人進來了
+                const mRef = ref(db, `rooms/${currentRoomId}/messages`);
+                await push(mRef, {
+                    sender: "system",
+                    text: "connected",
+                    time: serverTimestamp()
+                });
+
+                initChat(currentRoomId);
+            } else {
+                console.log("Step 5: No one waiting, creating pool entry...");
+                currentRoomId = `room_${myId}`;
+                await set(ref(db, `waiting_pool/${myId}`), { roomId: currentRoomId });
+                statusEl.innerText = "Status: Waiting for stranger...";
+                
+                // 監聽是否有訊息進來 (由第二個人發出的系統信號)
+                const roomMessagesRef = ref(db, `rooms/${currentRoomId}/messages`);
+                const unsubscribe = onValue(roomMessagesRef, (snap) => {
+                    if (snap.exists()) {
+                        unsubscribe(); // 停止監聽，進入聊天
+                        initChat(currentRoomId);
+                    }
+                });
             }
+        } catch (e) {
+            console.error("Database Error:", e);
         }
+    }
+
+    function initChat(id) {
+        console.log("Step 6: Chat Initiated, Room:", id);
+        inputCont.classList.remove('hidden');
+        statusEl.innerText = "Status: Connected";
+        
+        const roomRef = ref(db, `rooms/${id}`);
+        // 斷線自動銷毀
+        onDisconnect(roomRef).remove();
+
+        // 監聽房間訊息
+        onValue(roomRef, (snapshot) => {
+            if (!snapshot.exists()) {
+                console.log("Partner disconnected, reloading...");
+                location.reload();
+                return;
+            }
+            
+            const roomData = snapshot.val();
+            if (roomData && roomData.messages) {
+                const msgArray = Object.values(roomData.messages);
+                // 過濾掉剛才的 system 訊號，只顯示用戶訊息
+                const displayMsgs = msgArray.filter(m => m.sender !== "system");
+                render(displayMsgs.slice(-30));
+            }
+        });
+    }
 
         function initChat(id) {
             console.log("Step 6: Chat Initiated, Room:", id);
