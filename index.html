@@ -3,16 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ANON_PROTOCOL // V3.5</title>
+    <title>ANON_PROTOCOL // V3</title>
     <style>
         :root {
             --bg: #000000;
             --fg: #ffffff;
-            --me-bg: #0A84FF;
-            --stranger-bg: #1C1C1E;
+            --me-bg: #0A84FF; /* Apple iMessage Blue */
+            --stranger-bg: #2C2C2E; /* iOS Dark Gray */
             --sys-text: #8E8E93;
             --border: rgba(255, 255, 255, 0.1);
-            --glass: rgba(0, 0, 0, 0.8);
+            --glass: rgba(0, 0, 0, 0.75);
             --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
         }
 
@@ -25,13 +25,14 @@
             margin: 0;
             height: 100vh;
             display: flex;
-            justify-content: center;
+            justify-content: center; /* 將整個畫面置中 */
             overflow: hidden;
         }
 
+        /* 集中視窗設定 */
         #app-container {
             width: 100%;
-            max-width: 600px;
+            max-width: 600px; /* 限制最大寬度，讓視線集中 */
             display: flex;
             flex-direction: column;
             position: relative;
@@ -40,166 +41,242 @@
             border-right: 1px solid var(--border);
         }
 
+        /* 頂部毛玻璃導覽列 */
         header {
             padding: 15px 20px;
             display: flex;
             justify-content: center;
             align-items: center;
-            font-size: 13px;
+            font-size: 14px;
             font-weight: 600;
             letter-spacing: 0.5px;
             position: absolute;
             top: 0; left: 0; right: 0;
             background: var(--glass);
-            backdrop-filter: blur(25px);
-            -webkit-backdrop-filter: blur(25px);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             border-bottom: 1px solid var(--border);
             z-index: 10;
         }
 
         .status-dot {
             width: 8px; height: 8px;
-            background: #FF9500;
+            background: #34C759;
             border-radius: 50%;
-            margin-right: 10px;
-            transition: background 0.3s, box-shadow 0.3s;
+            margin-right: 8px;
+            box-shadow: 0 0 8px rgba(52, 199, 89, 0.6);
         }
 
+        /* 聊天流 */
         #chat-flow {
             flex: 1;
-            padding: 80px 15px 110px 15px;
+            padding: 80px 20px 100px 20px; /* 留出 header 和 footer 空間 */
             overflow-y: auto;
             display: flex;
             flex-direction: column-reverse;
-            gap: 10px;
+            gap: 12px;
             scroll-behavior: smooth;
         }
 
-        ::-webkit-scrollbar { width: 0px; }
+        ::-webkit-scrollbar { width: 0px; } /* 隱藏滾動條以求極簡 */
 
-        /* 訊息動畫與氣泡 */
+        /* 訊息氣泡與動畫 */
         .msg-wrapper {
             display: flex;
             flex-direction: column;
-            animation: apple-slide 0.5s cubic-bezier(0.2, 1, 0.2, 1) forwards;
+            animation: spring-up 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
             opacity: 0;
+            transform-origin: bottom;
         }
 
-        @keyframes apple-slide {
-            from { opacity: 0; transform: translateY(30px) scale(0.9); }
+        @keyframes spring-up {
+            from { opacity: 0; transform: translateY(20px) scale(0.95); }
             to { opacity: 1; transform: translateY(0) scale(1); }
         }
 
         .msg {
-            max-width: 80%;
-            padding: 10px 16px;
+            max-width: 75%;
+            padding: 12px 16px;
             font-size: 15px;
-            line-height: 1.45;
-            border-radius: 18px;
+            line-height: 1.4;
+            border-radius: 20px;
             position: relative;
+            word-break: break-word;
             cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .msg:active { opacity: 0.7; }
+
+        /* 回覆區塊樣式 */
+        .reply-quote {
+            font-size: 12px;
+            background: rgba(0,0,0,0.2);
+            padding: 6px 10px;
+            border-radius: 10px;
+            margin-bottom: 6px;
+            border-left: 3px solid rgba(255,255,255,0.5);
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* 圖片樣式 */
+        .msg img {
+            max-width: 100%;
+            border-radius: 12px;
+            margin-top: 5px;
         }
 
         .msg-wrapper.me { align-items: flex-end; }
-        .msg-wrapper.me .msg { background: var(--me-bg); color: #fff; border-bottom-right-radius: 4px; }
+        .msg-wrapper.me .msg {
+            background-color: var(--me-bg);
+            color: var(--fg);
+            border-bottom-right-radius: 4px;
+        }
 
         .msg-wrapper.stranger { align-items: flex-start; }
-        .msg-wrapper.stranger .msg { background: var(--stranger-bg); color: #fff; border-bottom-left-radius: 4px; }
-
-        /* 圖片容器與尺寸標籤 */
-        .img-container { position: relative; line-height: 0; margin: 4px 0; }
-        .msg img { max-width: 100%; border-radius: 12px; }
-        .img-meta {
-            position: absolute; bottom: 6px; right: 6px;
-            background: rgba(0,0,0,0.55);
-            backdrop-filter: blur(5px);
-            color: #fff; font-size: 9px;
-            padding: 2px 6px; border-radius: 4px;
-            pointer-events: none; opacity: 0.8;
+        .msg-wrapper.stranger .msg {
+            background-color: var(--stranger-bg);
+            color: var(--fg);
+            border-bottom-left-radius: 4px;
         }
 
-        .reply-quote {
-            font-size: 12px; background: rgba(255,255,255,0.1);
-            padding: 6px 10px; border-radius: 10px;
-            margin-bottom: 4px; border-left: 3px solid rgba(255,255,255,0.3);
-            opacity: 0.8;
+        .msg-wrapper.system {
+            align-items: center;
+            font-size: 12px;
+            color: var(--sys-text);
+            margin: 15px 0;
+            font-weight: 500;
         }
 
-        /* 正在輸入 */
+        /* 正在輸入狀態 */
         #typing-indicator {
             align-self: flex-start;
             background: var(--stranger-bg);
-            padding: 12px 16px; border-radius: 18px;
-            display: none; align-items: center; gap: 4px;
-            margin-bottom: 5px;
+            padding: 12px 16px;
+            border-radius: 20px;
+            border-bottom-left-radius: 4px;
+            display: none;
+            align-items: center;
+            gap: 4px;
+            animation: fade-in 0.3s forwards;
+            margin-bottom: 10px;
         }
-        #typing-indicator.active { display: flex; animation: fade-in 0.3s; }
+        #typing-indicator.active { display: flex; }
+        
+        .dot {
+            width: 6px; height: 6px;
+            background: var(--sys-text);
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+        .dot:nth-child(1) { animation-delay: -0.32s; }
+        .dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+        @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 
+        /* 底部輸入區域毛玻璃 */
         footer {
-            position: absolute; bottom: 0; left: 0; right: 0;
-            background: var(--glass); backdrop-filter: blur(25px);
-            -webkit-backdrop-filter: blur(25px);
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            background: var(--glass);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             border-top: 1px solid var(--border);
-            padding: 10px 15px 25px 15px;
-            z-index: 10;
+            padding: 10px 20px 20px 20px;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
+        footer.hidden { transform: translateY(100%); }
+
+        /* 回覆預覽列 */
         #reply-preview {
-            display: none; justify-content: space-between;
-            background: var(--stranger-bg); padding: 8px 12px;
-            border-radius: 12px; font-size: 12px; margin-bottom: 10px;
-            border-left: 3px solid var(--me-bg);
+            display: none;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--stranger-bg);
+            padding: 8px 15px;
+            border-radius: 10px;
+            font-size: 12px;
+            margin-bottom: 10px;
+            color: var(--sys-text);
         }
-        #reply-preview.active { display: flex; }
+        #reply-preview.active { display: flex; animation: fade-in 0.2s; }
+        #cancel-reply { cursor: pointer; color: var(--fg); font-weight: bold; }
 
-        .input-bar { display: flex; align-items: center; gap: 10px; }
+        .input-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* 圖片上傳按鈕 */
+        .btn-icon {
+            background: none;
+            border: none;
+            color: var(--sys-text);
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s;
+        }
+        .btn-icon:hover { color: var(--fg); }
+
         .input-wrapper {
-            flex: 1; background: #262629;
-            border-radius: 20px; padding: 8px 15px;
+            flex: 1;
+            background: var(--stranger-bg);
+            border-radius: 20px;
+            padding: 10px 18px;
+            display: flex;
+            align-items: center;
         }
+
         input[type="text"] {
-            width: 100%; background: transparent; border: none;
-            color: #fff; outline: none; font-size: 16px;
+            width: 100%;
+            background: transparent;
+            border: none;
+            color: var(--fg);
+            font-family: inherit;
+            font-size: 16px;
+            outline: none;
         }
-        
-        .btn-icon { background: none; border: none; color: var(--sys-text); cursor: pointer; display: flex; }
-        
-        #overlay {
-            position: fixed; inset: 0; background: #000; z-index: 1000;
-            display: flex; align-items: center; justify-content: center;
-        }
+        input[type="text"]::placeholder { color: var(--sys-text); }
+        input[type="file"] { display: none; }
+
     </style>
 </head>
 <body>
 
-<div id="overlay">
-    <button onclick="initProtocol()" style="background:none; border:1px solid #fff; color:#fff; padding:12px 25px; cursor:pointer; font-size:12px; letter-spacing:2px; text-transform:uppercase;">Initialize Protocol</button>
-</div>
-
 <div id="app-container">
     <header>
         <div class="status-dot" id="dot"></div>
-        <span id="status-text">Ready</span>
+        <span id="status-text">Connecting...</span>
     </header>
 
     <main id="chat-flow">
         <div id="typing-indicator">
-            <div style="width:5px;height:5px;background:#8E8E93;border-radius:50%;animation:bounce 1.4s infinite"></div>
-            <div style="width:5px;height:5px;background:#8E8E93;border-radius:50%;animation:bounce 1.4s infinite 0.2s"></div>
-            <div style="width:5px;height:5px;background:#8E8E93;border-radius:50%;animation:bounce 1.4s infinite 0.4s"></div>
+            <div class="dot"></div><div class="dot"></div><div class="dot"></div>
         </div>
+        <div class="msg-wrapper system" id="sys-msg">Initializing end-to-end anonymity...</div>
     </main>
 
-    <footer id="input-wrap">
+    <footer id="input-wrap" class="hidden">
         <div id="reply-preview">
-            <span id="reply-text"></span>
-            <span onclick="cancelReply()" style="cursor:pointer">✕</span>
+            <span id="reply-text">Replying to...</span>
+            <span id="cancel-reply">✕</span>
         </div>
         <div class="input-bar">
             <button class="btn-icon" onclick="document.getElementById('file-input').click()">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
             </button>
-            <input type="file" id="file-input" accept="image/*" style="display:none">
+            <input type="file" id="file-input" accept="image/*">
+            
             <div class="input-wrapper">
                 <input type="text" id="m-input" placeholder="Message..." autocomplete="off">
             </div>
@@ -225,24 +302,23 @@
     const db = getDatabase(app);
     const myId = Math.random().toString(36).substring(7);
     let currentRoomId = null;
-    let replyTarget = null;
+    let replyTarget = null; // 儲存目前要回覆的訊息內容
 
+    // DOM Elements
     const statusText = document.getElementById('status-text');
     const dot = document.getElementById('dot');
     const flowEl = document.getElementById('chat-flow');
+    const inputWrap = document.getElementById('input-wrap');
     const inputEl = document.getElementById('m-input');
+    const fileInput = document.getElementById('file-input');
     const typingIndicator = document.getElementById('typing-indicator');
-
-    window.initProtocol = () => {
-        document.getElementById('overlay').style.display = 'none';
-        startMatch();
-    };
+    const replyPreview = document.getElementById('reply-preview');
+    const replyText = document.getElementById('reply-text');
 
     async function startMatch() {
-        statusText.innerText = 'Searching...';
-        dot.style.background = '#FF9500';
-        dot.style.boxShadow = '0 0 8px #FF9500';
-
+        dot.style.background = '#FF9500'; // 橘色表示尋找中
+        statusText.innerText = 'Searching for stranger...';
+        
         const poolRef = ref(db, 'waiting_pool');
         const snapshot = await get(poolRef);
         
@@ -251,7 +327,7 @@
             const opponentId = Object.keys(waiters)[0];
             currentRoomId = waiters[opponentId].roomId;
             await remove(ref(db, `waiting_pool/${opponentId}`));
-            await push(ref(db, `rooms/${currentRoomId}/messages`), { sender: "sys", text: "sync" });
+            await push(ref(db, `rooms/${currentRoomId}/messages`), { sender: "sys_sync", text: "1" });
             beginChat(currentRoomId);
         } else {
             currentRoomId = `room_${myId}`;
@@ -259,129 +335,163 @@
             onDisconnect(ref(db, `waiting_pool/${myId}`)).remove();
             
             const syncRef = ref(db, `rooms/${currentRoomId}/messages`);
-            const unsub = onValue(syncRef, (s) => { if(s.exists()){ unsub(); beginChat(currentRoomId); }});
+            const unsubscribe = onValue(syncRef, (snap) => {
+                if (snap.exists()) {
+                    unsubscribe();
+                    beginChat(currentRoomId);
+                }
+            });
         }
     }
 
     function beginChat(roomId) {
-        statusText.innerText = 'Connected';
-        dot.style.background = '#34C759';
-        dot.style.boxShadow = '0 0 8px #34C759';
+        dot.style.background = '#34C759'; // 綠色表示已連線
+        statusText.innerText = "Stranger Connected";
+        document.getElementById('sys-msg').style.display = 'none';
+        inputWrap.classList.remove('hidden');
+        
+        const roomRef = ref(db, `rooms/${roomId}`);
+        onDisconnect(roomRef).remove(); // 關閉自動刪除房間
 
-        const presenceRef = ref(db, `rooms/${roomId}/presence/${myId}`);
-        onDisconnect(presenceRef).remove();
-        set(presenceRef, true);
+        // 監聽訊息
+        onValue(ref(db, `rooms/${roomId}/messages`), (snap) => {
+            if (!snap.exists()) { 
+                // 房間消失 = 對方離開
+                alert("Stranger has disconnected. Finding a new one...");
+                location.reload(); 
+                return; 
+            }
+            const msgList = Object.values(snap.val()).filter(m => m.sender !== "sys_sync");
+            updateUI(msgList.slice(-30));
+        });
 
-        // 監聽對方是否離開
-        onValue(ref(db, `rooms/${roomId}/presence`), (snap) => {
-            if (snap.exists() && Object.keys(snap.val()).length < 2) {
-                setTimeout(async () => {
-                    const check = await get(ref(db, `rooms/${roomId}/presence`));
-                    if(!check.exists() || Object.keys(check.val()).length < 2) location.reload();
-                }, 4000);
+        // 監聽對方打字狀態
+        onValue(ref(db, `rooms/${roomId}/typing`), (snap) => {
+            if (snap.exists()) {
+                const typers = snap.val();
+                const opponentTyping = Object.keys(typers).some(id => id !== myId && typers[id] === true);
+                opponentTyping ? typingIndicator.classList.add('active') : typingIndicator.classList.remove('active');
             }
         });
-
-        // 監聽訊息與打字
-        onValue(ref(db, `rooms/${roomId}/messages`), (s) => {
-            if(!s.exists()) return;
-            const msgs = Object.values(s.val()).filter(m => m.sender !== "sys");
-            updateUI(msgs.slice(-30));
-        });
-
-        onValue(ref(db, `rooms/${roomId}/typing`), (s) => {
-            const typers = s.val() || {};
-            const isTyping = Object.keys(typers).some(id => id !== myId);
-            isTyping ? typingIndicator.classList.add('active') : typingIndicator.classList.remove('active');
-        });
     }
 
-    async function sendMessage(text, type = 'text', info = null) {
-        if (!text || !currentRoomId) return;
-        const msgRef = ref(db, `rooms/${currentRoomId}/messages`);
-        
-        // 物理清理：超過 30 條刪除最舊
-        const snap = await get(msgRef);
-        if(snap.exists()){
-            const keys = Object.keys(snap.val());
-            if(keys.length >= 30) await remove(ref(db, `rooms/${currentRoomId}/messages/${keys[0]}`));
-        }
-
-        const payload = { sender: myId, text, type, info, ts: serverTimestamp() };
-        if(replyTarget) { payload.replyTo = replyTarget; cancelReply(); }
-        
-        await push(msgRef, payload);
-        inputEl.value = '';
-        setTyping(false);
-    }
-
+    // 渲染 UI (支援圖片與回覆)
     function updateUI(msgs) {
-        const typing = typingIndicator;
-        flowEl.innerHTML = '';
-        flowEl.appendChild(typing);
+        const reversed = [...msgs].reverse(); 
         
-        [...msgs].reverse().forEach(m => {
+        // 保留 typing-indicator
+        const typingEl = typingIndicator;
+        flowEl.innerHTML = '';
+        flowEl.appendChild(typingEl);
+
+        reversed.forEach(m => {
             const wrap = document.createElement('div');
             wrap.className = `msg-wrapper ${m.sender === myId ? 'me' : 'stranger'}`;
             
-            let html = m.replyTo ? `<div class="reply-quote">${m.replyTo.text}</div>` : '';
-            if(m.type === 'image'){
-                html += `<div class="img-container"><img src="${m.text}">${m.info ? `<span class="img-meta">${m.info.size} · ${m.info.format}</span>`:''}</div>`;
-            } else {
-                html += m.text;
+            let contentHtml = '';
+            
+            // 如果有回覆目標，先渲染回覆框
+            if (m.replyTo) {
+                const replyLabel = m.replyTo.sender === myId ? 'You' : 'Stranger';
+                contentHtml += `<div class="reply-quote">${replyLabel}: ${m.replyTo.text}</div>`;
             }
 
-            wrap.innerHTML = `<div class="msg" onclick="setReply('${m.sender}', \`${m.type==='image'?'[Image]':m.text.substring(0,20)}\`)">${html}</div>`;
+            // 判斷是文字還是圖片
+            if (m.type === 'image') {
+                contentHtml += `<img src="${m.text}" alt="image">`;
+            } else {
+                contentHtml += `${m.text}`;
+            }
+
+            wrap.innerHTML = `<div class="msg" onclick="setReply('${m.sender}', \`${m.type === 'image' ? '[Image]' : m.text.replace(/`/g, '')}\`)">${contentHtml}</div>`;
             flowEl.appendChild(wrap);
         });
     }
 
-    window.setReply = (sId, text) => {
-        replyTarget = { sender: sId, text: text };
-        document.getElementById('reply-text').innerText = `Replying to: ${text}`;
-        document.getElementById('reply-preview').classList.add('active');
+    // 設定回覆
+    window.setReply = (senderId, text) => {
+        replyTarget = { sender: senderId, text: text };
+        replyText.innerText = `Replying to: ${text}`;
+        replyPreview.classList.add('active');
         inputEl.focus();
     };
 
-    window.cancelReply = () => {
+    document.getElementById('cancel-reply').onclick = () => {
         replyTarget = null;
-        document.getElementById('reply-preview').classList.remove('active');
+        replyPreview.classList.remove('active');
     };
 
-    // 打字偵測
-    let tTimer;
-    const setTyping = (v) => set(ref(db, `rooms/${currentRoomId}/typing/${myId}`), v ? true : null);
-    inputEl.oninput = () => { setTyping(true); clearTimeout(tTimer); tTimer = setTimeout(()=>setTyping(false), 2000); };
-    inputEl.onkeypress = (e) => { if(e.key === 'Enter') sendMessage(inputEl.value.trim()); };
+    // 發送訊息
+    async function sendMessage(text, type = 'text') {
+        if (!text) return;
+        const payload = {
+            sender: myId,
+            text: text,
+            type: type,
+            ts: serverTimestamp()
+        };
+        if (replyTarget) {
+            payload.replyTo = replyTarget;
+            document.getElementById('cancel-reply').click(); // 清除回覆狀態
+        }
+        await push(ref(db, `rooms/${currentRoomId}/messages`), payload);
+        inputEl.value = '';
+        setTyping(false);
+    }
 
-    // 圖片壓縮與 Size 計算
-    document.getElementById('file-input').onchange = (e) => {
+    // 文字輸入事件
+    inputEl.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') sendMessage(inputEl.value.trim());
+    });
+
+    // 打字狀態偵測
+    let typingTimer;
+    function setTyping(isTyping) {
+        if (currentRoomId) set(ref(db, `rooms/${currentRoomId}/typing/${myId}`), isTyping ? true : null);
+    }
+    
+    inputEl.addEventListener('input', () => {
+        setTyping(true);
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(() => setTyping(false), 2000); // 2秒沒打字視為停止
+    });
+    inputEl.addEventListener('blur', () => setTyping(false));
+
+    // 圖片上傳壓縮邏輯 (Canvas)
+    fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
-        if(!file) return;
-        const sizeStr = (file.size / 1024 / 1024).toFixed(1) + ' MB';
-        const fmt = file.type.split('/')[1].toUpperCase();
+        if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = (ev) => {
+        reader.onload = (event) => {
             const img = new Image();
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                const MAX = 800;
-                let w = img.width, h = img.height;
-                if(w > MAX) { h *= MAX/w; w = MAX; }
-                canvas.width = w; canvas.height = h;
-                canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-                sendMessage(canvas.toDataURL('image/jpeg', 0.7), 'image', { size: sizeStr, format: fmt });
+                const ctx = canvas.getContext('2d');
+                // 限制最大寬度以節省 Firebase 資料庫空間
+                const MAX_WIDTH = 600;
+                let width = img.width;
+                let height = img.height;
+
+                if (width > MAX_WIDTH) {
+                    height *= MAX_WIDTH / width;
+                    width = MAX_WIDTH;
+                }
+                canvas.width = width;
+                canvas.height = height;
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                // 轉為 Base64 (0.7 品質的 JPG) 並發送
+                const base64Data = canvas.toDataURL('image/jpeg', 0.7);
+                sendMessage(base64Data, 'image');
             };
-            img.src = ev.target.result;
+            img.src = event.target.result;
         };
         reader.readAsDataURL(file);
-    };
+        fileInput.value = ''; // 重置 file input
+    });
 
+    startMatch();
 </script>
-
-<style>
-    @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
-</style>
 </body>
 </html>
