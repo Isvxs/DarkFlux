@@ -344,26 +344,26 @@
         }
     }
 
-    function beginChat(roomId) {
-        dot.style.background = '#34C759'; // 綠色表示已連線
-        statusText.innerText = "Stranger Connected";
-        document.getElementById('sys-msg').style.display = 'none';
-        inputWrap.classList.remove('hidden');
-        
-        const roomRef = ref(db, `rooms/${roomId}`);
-        onDisconnect(roomRef).remove(); // 關閉自動刪除房間
+function beginChat(roomId) {
+    const roomRef = ref(db, `rooms/${roomId}`);
+    const presenceRef = ref(db, `rooms/${roomId}/presence/${myId}`);
 
-        // 監聽訊息
-        onValue(ref(db, `rooms/${roomId}/messages`), (snap) => {
-            if (!snap.exists()) { 
-                // 房間消失 = 對方離開
-                alert("Stranger has disconnected. Finding a new one...");
-                location.reload(); 
-                return; 
-            }
-            const msgList = Object.values(snap.val()).filter(m => m.sender !== "sys_sync");
-            updateUI(msgList.slice(-30));
-        });
+    // 當我斷線時：1. 刪除我的存在標記 2. 如果我是最後一人，刪除整個房間
+    onDisconnect(presenceRef).remove();
+    set(presenceRef, true);
+
+    // 監聽房間人數，如果對方不見了，就視為斷線
+    onValue(ref(db, `rooms/${roomId}/presence`), (snap) => {
+        if (snap.exists() && Object.keys(snap.val()).length < 2) {
+            // 給予 5 秒寬限期（防止網路抖動）
+            setTimeout(async () => {
+                const recheck = await get(ref(db, `rooms/${roomId}/presence`));
+                if (!recheck.exists() || Object.keys(recheck.val()).length < 2) {
+                    location.reload();
+                }
+            }, 5000);
+        }
+    });
 
         // 監聽對方打字狀態
         onValue(ref(db, `rooms/${roomId}/typing`), (snap) => {
@@ -422,22 +422,35 @@
     };
 
     // 發送訊息
-    async function sendMessage(text, type = 'text') {
-        if (!text) return;
-        const payload = {
-            sender: myId,
-            text: text,
-            type: type,
-            ts: serverTimestamp()
-        };
-        if (replyTarget) {
-            payload.replyTo = replyTarget;
-            document.getElementById('cancel-reply').click(); // 清除回覆狀態
+async function sendMessage(text, type = 'text') {
+    if (!text) return;
+    
+    const messagesRef = ref(db, `rooms/${currentRoomId}/messages`);
+    
+    // 獲取目前訊息數量
+    const snapshot = await get(messagesRef);
+    if (snapshot.exists()) {
+        const keys = Object.keys(snapshot.val());
+        if (keys.length >= 30) {
+            // 物理刪除最舊的一條
+            await remove(ref(db, `rooms/${currentRoomId}/messages/${keys[0]}`));
         }
-        await push(ref(db, `rooms/${currentRoomId}/messages`), payload);
-        inputEl.value = '';
-        setTyping(false);
     }
+
+    const payload = {
+        sender: myId,
+        text: text,
+        type: type,
+        ts: serverTimestamp()
+    };
+    if (replyTarget) {
+        payload.replyTo = replyTarget;
+        document.getElementById('cancel-reply').click();
+    }
+    await push(messagesRef, payload);
+    inputEl.value = '';
+    setTyping(false);
+}
 
     // 文字輸入事件
     inputEl.addEventListener('keypress', (e) => {
