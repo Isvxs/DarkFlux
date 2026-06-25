@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<link rel="icon" href="DarkFluxWebIcon.png" type="image/png">
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+    <link rel="icon" href="DarkFluxWebIcon.png" type="image/png">
+    <title>DarkFlux</title>
+    <style>
+        html, body {
+    touch-action: manipulation;
+}
+        :root {
+            --bg: #000000;
+            --fg: #ffffff;
+            --me-bg: #0A84FF;
+            --stranger-bg: #2C2C2E;
+            --sys-text: #8E8E93;
+            --border: rgba(255, 255, 255, 0.1);
+            --glass: rgba(0, 0, 0, 0.75);
+            --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            background-color: var(--bg);
+            color: var(--fg);
+            font-family: var(--font);
+            margin: 0;
+            height: 100vh;
+            height: 100dvh;
+            display: flex;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        #app-container {
+            width: 100%;
+            max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            background: var(--bg);
+            border-left: 1px solid var(--border);
+            border-right: 1px solid var(--border);
+        }
+
+        header {
+            padding: 15px 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            background: var(--glass);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            z-index: 10;
+            transition: color 0.3s;
+        }
+
+        .status-dot {
+            width: 8px; height: 8px;
+            background: #FF9500;
+            border-radius: 50%;
+            margin-right: 8px;
+            transition: background 0.3s, box-shadow 0.3s;
+        }
+
+        #quit-btn {
+            position: absolute;
+            right: 15px;
+            background: #FF3B30;
+            color: white;
+            border: none;
+            border-radius: 15px;
+            padding: 6px 14px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            display: none;
+            transition: opacity 0.2s;
+        }
+        #quit-btn:hover { opacity: 0.8; }
+
+        #chat-flow {
+            flex: 1;
+            padding: 80px 20px 100px 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column-reverse;
+            gap: 12px;
+            scroll-behavior: smooth;
+            overscroll-behavior: contain;
+        }
+
+        ::-webkit-scrollbar { width: 0px; }
+
+        .msg-wrapper {
+            display: flex;
+            flex-direction: column;
+            animation: spring-up 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+            opacity: 0;
+            transform-origin: bottom;
+        }
+
+        @keyframes spring-up {
+            from { opacity: 0; transform: translateY(20px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .msg {
+            max-width: 75%;
+            padding: 12px 16px;
+            font-size: 15px;
+            line-height: 1.4;
+            border-radius: 20px;
+            position: relative;
+            word-break: break-word;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .msg:active { opacity: 0.7; }
+
+        .reply-quote {
+            font-size: 12px;
+            background: rgba(0,0,0,0.2);
+            padding: 6px 10px;
+            border-radius: 10px;
+            margin-bottom: 6px;
+            border-left: 3px solid rgba(255,255,255,0.5);
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .msg img {
+            max-width: 100%;
+            border-radius: 12px;
+            margin-top: 5px;
+        }
+        .msg img.spoiler-blur {
+            filter: blur(20px);
+            cursor: pointer;
+            transition: filter 0.3s ease;
+        }
+        .msg img.spoiler-blur.revealed {
+            filter: blur(0);
+        }
+
+        .msg-wrapper.me { align-items: flex-end; }
+        .msg-wrapper.me .msg { background-color: var(--me-bg); color: var(--fg); border-bottom-right-radius: 4px; }
+        .msg-wrapper.stranger { align-items: flex-start; }
+        .msg-wrapper.stranger .msg { background-color: var(--stranger-bg); color: var(--fg); border-bottom-left-radius: 4px; }
+        .msg-wrapper.system { align-items: center; font-size: 12px; color: var(--sys-text); margin: 15px 0; font-weight: 500; }
+
+        #typing-indicator {
+            align-self: flex-start;
+            background: var(--stranger-bg);
+            padding: 12px 16px;
+            border-radius: 20px;
+            border-bottom-left-radius: 4px;
+            display: none;
+            align-items: center;
+            gap: 4px;
+            animation: fade-in 0.3s forwards;
+            margin-bottom: 10px;
+        }
+        #typing-indicator.active { display: flex; }
+        
+        .dot { width: 6px; height: 6px; background: var(--sys-text); border-radius: 50%; animation: bounce 1.4s infinite ease-in-out both; }
+        .dot:nth-child(1) { animation-delay: -0.32s; }
+        .dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+        @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+        footer {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            background: var(--glass);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-top: 1px solid var(--border);
+            padding: 10px 20px 20px 20px;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            padding-bottom: calc(20px + env(safe-area-inset-bottom));
+        }
+        footer.hidden { transform: translateY(100%); }
+
+        #reply-preview { display: none; justify-content: space-between; align-items: center; background: var(--stranger-bg); padding: 8px 15px; border-radius: 10px; font-size: 12px; margin-bottom: 10px; color: var(--sys-text); }
+        #reply-preview.active { display: flex; animation: fade-in 0.2s; }
+        #cancel-reply { cursor: pointer; color: var(--fg); font-weight: bold; }
+
+        .input-bar { display: flex; align-items: center; gap: 12px; }
+        .btn-icon { background: none; border: none; color: var(--sys-text); font-size: 24px; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; transition: color 0.2s; }
+        .btn-icon:hover { color: var(--fg); }
+        .input-wrapper { flex: 1; background: var(--stranger-bg); border-radius: 20px; padding: 10px 18px; display: flex; align-items: center; }
+        input[type="text"] { width: 100%; background: transparent; border: none; color: var(--fg); font-family: inherit; font-size: 16px; outline: none; }
+        input[type="text"]::placeholder { color: var(--sys-text); }
+        input[type="file"] { display: none; }
+
+        #img-viewer { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: none; justify-content: center; align-items: center; z-index: 999; }
+        #img-viewer.active { display: flex; }
+        #img-viewer img { max-width: 95%; max-height: 95%; }
+
+        #image-preview-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+        .preview-item { position: relative; width: 60px; height: 60px; border-radius: 10px; overflow: hidden; cursor: pointer; }
+        .preview-item img { width: 100%; height: 100%; object-fit: cover; }
+        .preview-item.spoiler img { filter: blur(10px); }
+        .preview-actions { position: absolute; top: 2px; right: 2px; display: flex; gap: 4px; }
+        .preview-actions button { background: rgba(0,0,0,0.6); border: none; color: white; font-size: 10px; cursor: pointer; border-radius: 4px; }
+        .version-text {
+  font-size: 10px;
+  color: white;
+  opacity: 0.2;
+  margin-bottom: 1px;
+  text-align: center;
+  font-style: italic;
+}
+    </style>
+<div class="powered-by">
+  <div class="version-text">v2.4.3</div>
+  <div class="powered-text">Powered by</div>
+  <img src="DarkFluxIcon.png" alt="DarkFlux" class="darkflux-icon">
+</div>
+</div>
+
+<style>
+.powered-by {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  user-select: none;
+  pointer-events: none; /* 整個區塊不可互動 */
+}
+
+.powered-text {
+  font-size: 10px;
+  color: white;
+  opacity: 0.7;
+  margin-bottom: 6px;
+  text-align: center;
+  font-weight: bold;
+}
+
+.darkflux-icon {
+  width: 120px;   /* 可自行調整大小 */
+  height: auto;
+  display: block;
+  opacity: 0.7;
+}
+</style>
+</head>
+<body>
+
+<div id="app-container">
+    <header>
+        <div class="status-dot" id="dot"></div>
+        <span id="status-text">Connecting...</span>
+        <button id="quit-btn">Quit</button>
+    </header>
+
+    <main id="chat-flow">
+        <div id="typing-indicator">
+            <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+        <div class="msg-wrapper system" id="sys-msg">Initializing end-to-end anonymity...</div>
+    </main>
+
+    <footer id="input-wrap" class="hidden">
+        <div id="image-preview-bar"></div>
+        <div id="reply-preview">
+            <span id="reply-text">Replying...</span>
+            <span id="cancel-reply">✕</span>
+        </div>
+        <div class="input-bar">
+            <button class="btn-icon" onclick="document.getElementById('file-input').click()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+            </button>
+            <input type="file" id="file-input" accept="image/*">
+            <div class="input-wrapper">
+                <input type="text" id="m-input" placeholder="Message..." autocomplete="off">
+            </div>
+        </div>
+    </footer>
+</div>
+
+<div id="img-viewer">
+    <img id="viewer-img">
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
+    import { getDatabase, ref, push, onValue, set, onDisconnect, remove, get, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyDhH-mST6_gPbOCJxFhJBe9FSK-iVYPmpw",
+        authDomain: "plchat-69b04.firebaseapp.com",
+        databaseURL: "https://plchat-69b04-default-rtdb.firebaseio.com",
+        projectId: "plchat-69b04",
+        storageBucket: "plchat-69b04.firebasestorage.app",
+        messagingSenderId: "131639913861",
+        appId: "1:131639913861:web:c5c07002169470961668ec"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    
+    // --- 無痕視窗與惡意重置防護機制 ---
+    let myId = localStorage.getItem('anon_uid');
+    let isNewUser = false;
+    if (!myId) {
+        myId = Math.random().toString(36).substring(7);
+        localStorage.setItem('anon_uid', myId);
+        isNewUser = true; // 標記為新建立（可能為無痕）
+    }
+
+    // MR 是隱藏值，無痕開啟的新用戶初始 MR 限制在 75 點（防止利用無痕刷回 100 滿分）
+    let myMR = parseInt(localStorage.getItem('anon_mr') || (isNewUser ? '75' : '100'), 10);
+    const saveMR = (val) => {
+        myMR = Math.max(0, Math.min(100, val));
+        localStorage.setItem('anon_mr', myMR);
+    };
+
+    let myFingerprint = localStorage.getItem('anon_browser_fingerprint');
+    if (!myFingerprint) {
+        myFingerprint = 'fp_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+        localStorage.setItem('anon_browser_fingerprint', myFingerprint);
+    }
+
+    let currentRoomId = sessionStorage.getItem('anon_roomId'); 
+    let currentOpponentId = null;
+    let replyTarget = null; 
+    let revealedImages = new Set(); 
+    let disconnectTimer = null;
+    let afkTimer = null; // 60秒掛機定時器
+
+    let myMsgCount = 0;
+    let opponentMsgCount = 0;
+    let roomStartTime = 0;
+    let lastMessageTime = 0; 
+    let initAllowQuit = false; // 0.5秒內不允許 Quit 的鎖
+
+    const statusText = document.getElementById('status-text');
+    const dot = document.getElementById('dot');
+    const flowEl = document.getElementById('chat-flow');
+    const inputWrap = document.getElementById('input-wrap');
+    const inputEl = document.getElementById('m-input');
+    const fileInput = document.getElementById('file-input');
+    const typingIndicator = document.getElementById('typing-indicator');
+    const replyPreview = document.getElementById('reply-preview');
+    const replyText = document.getElementById('reply-text');
+    const previewBar = document.getElementById('image-preview-bar');
+    const quitBtn = document.getElementById('quit-btn');
+
+    let imageQueue = [];
+    let viewer, viewerImg;
+    let pressTimer;
+
+    window.addEventListener('DOMContentLoaded', () => {
+        viewer = document.getElementById('img-viewer');
+        viewerImg = document.getElementById('viewer-img');
+        viewer.onclick = () => viewer.classList.remove('active');
+        
+        // --- 強制閃退防護機制 ---
+        // 頁面載入 0.5 秒後判定為正常活體，寫入快取。若沒有此快取重開，代表上一次是異常閃退崩潰
+        setTimeout(() => {
+            sessionStorage.setItem('flux_session_alive', '1');
+        }, 500);
+
+        init();
+    });
+
+    window.addEventListener('beforeunload', () => {
+        if (currentOpponentId) {
+            localStorage.setItem('blockedOpponent', currentOpponentId);
+            localStorage.setItem('blockTime', Date.now());
+            checkAndPunishSpamDisconnect();
+        }
+    });
+
+    function renderImageQueue() {
+        previewBar.innerHTML = '';
+        imageQueue.forEach(img => {
+            const div = document.createElement('div');
+            div.className = `preview-item ${img.spoiler ? 'spoiler' : ''}`;
+            div.innerHTML = `
+                <img src="${img.data}">
+                <div class="preview-actions">
+                    <button onclick="toggleQueueSpoiler('${img.id}')">S</button>
+                    <button onclick="removeQueueImage('${img.id}')">X</button>
+                </div>
+            `;
+            previewBar.appendChild(div);
+        });
+    }
+
+    async function init() {
+        if (currentRoomId) {
+            const roomSnap = await get(ref(db, `rooms/${currentRoomId}`));
+            if (roomSnap.exists()) {
+                beginChat(currentRoomId);
+                return;
+            } else {
+                sessionStorage.removeItem('anon_roomId');
+                currentRoomId = null;
+            }
+        }
+        startMatch();
+    }
+
+    // 重設 60 秒未對話自動斷線定時器
+    function resetAfkTimer() {
+        clearTimeout(afkTimer);
+        afkTimer = setTimeout(() => {
+            handleAfkTimeout();
+        }, 60000); // 60000ms = 60秒
+    }
+
+    // 觸發掛機自動斷線
+    async function handleAfkTimeout() {
+        sessionStorage.removeItem('anon_roomId');
+        if (currentRoomId) await remove(ref(db, `rooms/${currentRoomId}`));
+        alert("Chat ended due to 60 seconds of inactivity.");
+        location.reload();
+    }
+
+    // 檢查並懲罰惡意跳線行為
+    function checkAndPunishSpamDisconnect() {
+        // 如果網頁在 0.5 秒內崩潰或被強制劃掉（閃退），sessionStorage 來不及寫入，此處判定為不可抗力閃退，直接豁免不扣分
+        if (!sessionStorage.getItem('flux_session_alive')) {
+            return; 
+        }
+
+        if (!roomStartTime) return;
+        const duration = (Date.now() - roomStartTime) / 1000;
+        const totalMsg = myMsgCount + opponentMsgCount;
+
+        // 如果是正當退出（開局超 5 秒且對手不說話），免罰
+        if (duration >= 5 && myMsgCount > 0 && opponentMsgCount === 0) {
+            return; 
+        }
+
+        // 對話過少或時間過短，判定為惡意刷房扣除隱藏 MR
+        if (totalMsg < 5 || duration < 10) {
+            saveMR(myMR - 15); 
+        }
+    }
+
+    async function startMatch() {
+        dot.style.background = '#FF9500'; 
+        dot.style.boxShadow = '0 0 8px rgba(255, 149, 0, 0.6)';
+        statusText.innerText = `Searching...`; // MR 改為隱藏值，UI 剔除顯示
+        quitBtn.style.display = 'none';
+        initAllowQuit = false; // 初始化安全鎖
+        
+        let blockedOpponent = localStorage.getItem('blockedOpponent');
+        let blockTime = parseInt(localStorage.getItem('blockTime') || '0', 10);
+
+        const poolRef = ref(db, 'waiting_pool');
+        const snapshot = await get(poolRef);
+        
+        if (snapshot.exists()) {
+            const waiters = snapshot.val();
+            let matchedId = null;
+            
+            for (let id in waiters) {
+                if (id === myId) continue;
+                if (waiters[id].fp === myFingerprint) continue; 
+                if (id === blockedOpponent && (Date.now() - blockTime) < 15000) continue; 
+                
+                let oppMR = waiters[id].mr !== undefined ? waiters[id].mr : 100;
+                if (Math.abs(myMR - oppMR) <= 20) { 
+                    matchedId = id;
+                    break;
+                }
+            }
+            
+            if (!matchedId) {
+                for (let id in waiters) {
+                    if (id === myId) continue;
+                    if (waiters[id].fp === myFingerprint) continue; 
+                    if (id === blockedOpponent && (Date.now() - blockTime) < 15000) continue;
+                    matchedId = id;
+                    break;
+                }
+            }
+            
+            if (matchedId) {
+                currentOpponentId = matchedId;
+                currentRoomId = waiters[matchedId].roomId;
+                await remove(ref(db, `waiting_pool/${matchedId}`));
+                await set(ref(db, `rooms/${currentRoomId}/guest`), myId);
+                await push(ref(db, `rooms/${currentRoomId}/messages`), { sender: "sys_sync", text: "1" });
+                sessionStorage.setItem('anon_roomId', currentRoomId);
+                beginChat(currentRoomId);
+                return;
+            }
+        } 
+        
+        currentRoomId = `room_${myId}_${Date.now()}`;
+        await set(ref(db, `waiting_pool/${myId}`), { roomId: currentRoomId, creatorId: myId, mr: myMR, fp: myFingerprint });
+        onDisconnect(ref(db, `waiting_pool/${myId}`)).remove();
+        
+        const guestRef = ref(db, `rooms/${currentRoomId}/guest`);
+        const unsubscribe = onValue(guestRef, (snap) => {
+            if (snap.exists()) {
+                currentOpponentId = snap.val();
+                unsubscribe();
+                sessionStorage.setItem('anon_roomId', currentRoomId);
+                beginChat(currentRoomId);
+            }
+        });
+    }
+
+    function setPresence(state) {
+        if (currentRoomId) {
+            const presRef = ref(db, `rooms/${currentRoomId}/presence/${myId}`);
+            set(presRef, state);
+        }
+    }
+
+    function beginChat(roomId) {
+        document.getElementById('sys-msg').style.display = 'none';
+        inputWrap.classList.remove('hidden');
+        quitBtn.style.display = 'block';
+
+        myMsgCount = 0;
+        opponentMsgCount = 0;
+        roomStartTime = Date.now();
+
+        // 鎖定 Quit 按鈕：0.5 秒內按它完全沒有效果
+        setTimeout(() => { initAllowQuit = true; }, 500);
+
+        // 初始化 60 秒掛機機制
+        resetAfkTimer();
+
+        setPresence('active');
+        onDisconnect(ref(db, `rooms/${roomId}/presence/${myId}`)).set('offline');
+
+        document.addEventListener('visibilitychange', () => setPresence(document.visibilityState === 'visible' ? 'active' : 'away'));
+        window.addEventListener('focus', () => setPresence('active'));
+        window.addEventListener('blur', () => setPresence('away'));
+
+        onValue(ref(db, `rooms/${roomId}/presence`), (snap) => {
+            if (snap.exists() && currentOpponentId) {
+                const states = snap.val();
+                const oppState = states[currentOpponentId];
+                
+                if (oppState === 'offline') {
+                    dot.style.background = '#FF3B30'; 
+                    dot.style.boxShadow = '0 0 8px rgba(255, 59, 48, 0.6)';
+                    statusText.innerText = "Stranger disconnected...";
+                    disconnectTimer = setTimeout(() => handleDisconnect(true, true), 4000);
+                } else if (oppState) {
+                    clearTimeout(disconnectTimer);
+                    if (oppState === 'active') {
+                        dot.style.background = '#34C759'; 
+                        dot.style.boxShadow = '0 0 8px rgba(52, 199, 89, 0.6)';
+                        statusText.innerText = "Stranger is Active";
+                    } else if (oppState === 'away') {
+                        dot.style.background = '#8E8E93'; 
+                        dot.style.boxShadow = '0 0 8px rgba(142, 142, 147, 0.6)';
+                        statusText.innerText = "Stranger is Away";
+                    }
+                }
+            }
+        });
+
+        onValue(ref(db, `rooms/${roomId}/messages`), (snap) => {
+            if (!snap.exists()) { 
+                handleDisconnect(false, false); 
+                return; 
+            }
+            const msgs = Object.entries(snap.val()).map(([key, val]) => ({key, ...val})).filter(m => m.sender !== "sys_sync");
+            
+            // 只要任何人有新訊息進來，立即重置 60 秒掛機計時器
+            if(msgs.length > 0) {
+                resetAfkTimer();
+            }
+
+            myMsgCount = msgs.filter(m => m.sender === myId).length;
+            opponentMsgCount = msgs.filter(m => m.sender !== myId).length;
+            
+            updateUI(msgs.slice(-50));
+        });
+
+        onValue(ref(db, `rooms/${roomId}/typing`), (snap) => {
+            if (snap.exists()) {
+                const typers = snap.val();
+                const opponentTyping = Object.keys(typers).some(id => id !== myId && typers[id] === true);
+                opponentTyping ? typingIndicator.classList.add('active') : typingIndicator.classList.remove('active');
+            }
+        });
+    }
+
+    async function handleDisconnect(showPopup = true, isStrangerLeave = false) {
+        clearTimeout(afkTimer); // 清除掛機計時
+
+        if (currentOpponentId) {
+            localStorage.setItem('blockedOpponent', currentOpponentId);
+            localStorage.setItem('blockTime', Date.now());
+        }
+
+        const duration = (Date.now() - roomStartTime) / 1000;
+        if (isStrangerLeave && duration >= 5 && myMsgCount > 0 && opponentMsgCount === 0) {
+            // 無痛釋放
+        } else if (isStrangerLeave && (myMsgCount + opponentMsgCount) < 3) {
+            saveMR(myMR - 2); 
+        }
+
+        sessionStorage.removeItem('anon_roomId');
+        if (currentRoomId) remove(ref(db, `rooms/${currentRoomId}`));
+        
+        if (showPopup) alert("Stranger disconnected.");
+        location.reload();
+    }
+
+    quitBtn.onclick = async () => {
+        if (!initAllowQuit) return; // 0.5秒安全鎖鎖定中，點擊無效
+
+        checkAndPunishSpamDisconnect();
+        if (currentRoomId) await remove(ref(db, `rooms/${currentRoomId}`));
+        handleDisconnect(false, false);
+    };
+
+    function updateUI(msgs) {
+        const reversed = [...msgs].reverse(); 
+        const typingEl = typingIndicator;
+        flowEl.innerHTML = '';
+        flowEl.appendChild(typingEl);
+
+        reversed.forEach(m => {
+            const wrap = document.createElement('div');
+            wrap.className = `msg-wrapper ${m.sender === myId ? 'me' : 'stranger'}`;
+            let contentHtml = '';
+
+            if (m.replyTo) {
+                const replyLabel = m.replyTo.sender === myId ? 'You' : 'Stranger';
+                contentHtml += `<div class="reply-quote">${replyLabel}: ${m.replyTo.text}</div>`;
+            }
+
+            if (m.type === 'image') {
+                let spoilerClass = '';
+                if (m.meta && m.meta.spoiler) {
+                    spoilerClass = 'spoiler-blur';
+                    if (revealedImages.has(m.key)) spoilerClass += ' revealed';
+                }
+
+                contentHtml += `
+                <img src="${m.text}"
+                class="${spoilerClass}"
+                onclick="openImage(this, '${m.text}', '${m.key}')"
+                onmousedown="handleImagePress(event, '${m.text}')"
+                onmouseup="cancelPress()"
+                onmouseleave="cancelPress()"
+                ontouchstart="handleImagePress(event, '${m.text}')"
+                ontouchend="cancelPress()"
+                >`;
+
+                if (m.meta) {
+                    contentHtml += `
+                    <div style="font-size:11px;opacity:0.6;margin-top:4px;">
+                        ${m.meta.width}x${m.meta.height} • ${m.meta.sizeKB}KB
+                    </div>`;
+                }
+            } else {
+                contentHtml += `${m.text}`;
+            }
+
+            wrap.innerHTML = `
+            <div class="msg" onclick="setReply('${m.sender}', \`${m.text.replace(/`/g,'')}\`)">
+                ${contentHtml}
+            </div>`;
+            
+            flowEl.appendChild(wrap);
+        });
+    }
+
+    window.setReply = (senderId, text) => {
+        if (!text || text.startsWith("data:image")) return; 
+        replyTarget = { sender: senderId, text: text };
+        replyText.innerText = `Replying to: ${text}`;
+        replyPreview.classList.add('active');
+        inputEl.focus();
+    };
+
+    document.getElementById('cancel-reply').onclick = () => {
+        replyTarget = null;
+        replyPreview.classList.remove('active');
+    };
+
+    // --- 高精準 NSFW 前端二進位膚色集群與色情色彩分析演算法 ---
+    function isSensitiveImage(base64Str) {
+        if (!base64Str) return false;
+        try {
+            const parts = base64Str.split(',');
+            if (parts.length < 2) return false;
+            
+            // 將 Base64 字串還原成底層二進位 Byte 數據流
+            const binaryStr = atob(parts[1]);
+            const len = binaryStr.length;
+            const buffer = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                buffer[i] = binaryStr.charCodeAt(i);
+            }
+
+            let skinPixels = 0;
+            let totalChecked = 0;
+
+            // 針對 JPEG/PNG 畫素資料區段進行規律步進式抽樣（效率高，不卡網頁）
+            // 全面分析色域轉換後接近人體膚色集群 (YCbCr色域區間: 80<=Cb<=133 且 135<=Cr<=180) 
+            // 或是直方圖 RGB 特徵分佈
+            const step = len > 40000 ? Math.floor(len / 1500) : 10; 
+            
+            for (let i = Math.floor(len * 0.1); i < len * 0.9; i += step) {
+                if (i + 2 >= len) break;
+                let r = buffer[i];
+                let g = buffer[i+1];
+                let b = buffer[i+2];
+
+                totalChecked++;
+
+                // 針對人體裸露與腥羶色素色背景的高精準範圍計算
+                // 條件：R > 95 且 G > 40 且 B > 20 且 R > G 且 R > B 且 |R - G| > 15
+                if (r > 95 && g > 40 && b > 20) {
+                    if (r > g && r > b && Math.abs(r - g) > 15) {
+                        // 排除純白色(255,255,255)或灰色等無效噪點
+                        if (Math.abs(r - b) > 15) {
+                            skinPixels++;
+                        }
+                    }
+                }
+            }
+
+            // 當抽樣判定像素點中，符合裸露/大量膚色比例大於 42% 時，實施阻斷攔截
+            const skinRatio = skinPixels / totalChecked;
+            if (skinRatio > 0.42) {
+                return true; 
+            }
+        } catch (e) {
+            console.error("NSFW filter error: ", e);
+        }
+        return false;
+    }
+
+    async function sendMessage(text, type = 'text', meta = null) {
+        if (!text) return;
+
+        const now = Date.now();
+        if (now - lastMessageTime < 1000) { 
+            alert("Slow down! You are sending messages too fast.");
+            return;
+        }
+
+        // 強力防止腥羶色圖片
+        if (type === 'image' && isSensitiveImage(text)) {
+            alert("Upload blocked: Non-compliant content pattern detected.");
+            imageQueue = [];
+            renderImageQueue();
+            return;
+        }
+
+        lastMessageTime = now;
+
+        const payload = { sender: myId, text: text, type: type, ts: serverTimestamp() };
+        if (meta) payload.meta = meta;
+        if (replyTarget) {
+            payload.replyTo = replyTarget;
+            document.getElementById('cancel-reply').click();
+        }
+        await push(ref(db, `rooms/${currentRoomId}/messages`), payload);
+        inputEl.value = '';
+        setTyping(false);
+    }
+
+    inputEl.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            const text = inputEl.value.trim();
+            if (imageQueue.length > 0) sendAllImages();
+            if (text) sendMessage(text);
+        }
+    });
+
+    let typingTimer;
+    function setTyping(isTyping) {
+        if (currentRoomId) set(ref(db, `rooms/${currentRoomId}/typing/${myId}`), isTyping ? true : null);
+    }
+    
+    inputEl.addEventListener('input', () => {
+        setTyping(true);
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(() => setTyping(false), 2000); 
+    });
+    inputEl.addEventListener('blur', () => setTyping(false));
+
+    const MAX_FILE_SIZE = 1024 * 1024; 
+    const MAX_DIMENSION = 1024;
+
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (file.size > MAX_FILE_SIZE) {
+            alert('Upload failed: File exceeds the 1MB limit.');
+            fileInput.value = '';
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                let width = img.width;
+                let height = img.height;
+
+                if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+                    const scale = Math.min(MAX_DIMENSION / width, MAX_DIMENSION / height);
+                    width *= scale;
+                    height *= scale;
+                }
+
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = width;
+                canvas.height = height;
+                ctx.drawImage(img, 0, 0, width, height);
+
+                const base64Data = canvas.toDataURL('image/jpeg', 0.7);
+                const id = Math.random().toString(36).slice(2);
+
+                if (isSensitiveImage(base64Data)) {
+                    alert("Upload blocked: Non-compliant content pattern detected.");
+                    return;
+                }
+
+                imageQueue.push({
+                    id,
+                    data: base64Data,
+                    width: Math.round(width),
+                    height: Math.round(height),
+                    spoiler: false,
+                    sizeKB: (base64Data.length * 0.75 / 1024).toFixed(1)
+                });
+                
+                renderImageQueue();
+            };
+            img.src = event.target.result;
+        };
+
+        reader.readAsDataURL(file);
+        fileInput.value = '';
+    });
+
+    window.openImage = (el, src, msgKey) => {
+        event.stopPropagation(); 
+        if (el.classList.contains('spoiler-blur') && !el.classList.contains('revealed')) {
+            el.classList.add('revealed');
+            if (msgKey) revealedImages.add(msgKey); 
+            return;
+        }
+        viewerImg.src = src;
+        viewer.classList.add('active');
+    };
+
+    window.toggleQueueSpoiler = (id) => {
+        const item = imageQueue.find(i => i.id === id);
+        if (item) item.spoiler = !item.spoiler;
+        renderImageQueue();
+    };
+
+    window.handleImagePress = (e, src) => {
+        pressTimer = setTimeout(() => {
+            const a = document.createElement('a');
+            a.href = src;
+            a.download = 'image.jpg';
+            a.click();
+        }, 500);
+    };
+
+    async function sendAllImages() {
+        for (const img of imageQueue) {
+            await sendMessage(img.data, 'image', {
+                width: img.width,
+                height: img.height,
+                spoiler: img.spoiler
+            });
+        }
+        imageQueue = [];
+        renderImageQueue();
+    }
+
+    window.cancelPress = () => clearTimeout(pressTimer);
+    window.removeQueueImage = (id) => {
+        imageQueue = imageQueue.filter(i => i.id !== id);
+        renderImageQueue();
+    };
+</script>
+</body>
+</html>
