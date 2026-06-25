@@ -304,6 +304,12 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
     import { getDatabase, ref, push, onValue, set, onDisconnect, remove, get, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
 
+    // --- 控制台專屬警告與指令 (DARKFLOW) ---
+    console.log(
+        "%cDARKFLOW organization copyright owned.\nbe CAREFUL what you are going COPIES IN HERE, if you DONT KNOW WHAT IF YOU COPY AND WHAT HAPPENS, You will bear the consequences.",
+        "color: #ff0000; font-size: 14px; font-weight: bold; background: #111; padding: 10px; display: block;"
+    );
+
     const firebaseConfig = {
         apiKey: "AIzaSyDhH-mST6_gPbOCJxFhJBe9FSK-iVYPmpw",
         authDomain: "plchat-69b04.firebaseapp.com",
@@ -317,7 +323,34 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
     
-    // --- 無痕視窗與惡意重置防護機制 ---
+    // --- 硬體與渲染特徵指紋 (防無痕互連) ---
+    function getDeviceFingerprint() {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        ctx.textBaseline = "top";
+        ctx.font = "14px 'Arial'";
+        ctx.fillStyle = "#f60";
+        ctx.fillRect(125,1,62,20);
+        ctx.fillStyle = "#069";
+        ctx.fillText("DARKFLOW_SENTRY", 2, 15);
+        ctx.fillStyle = "rgba(102, 204, 0, 0.7)";
+        ctx.fillText("DARKFLOW_SENTRY", 4, 17);
+        const b64 = canvas.toDataURL();
+        
+        let hash = 0;
+        for (let i = 0; i < b64.length; i++) {
+            hash = ((hash << 5) - hash) + b64.charCodeAt(i);
+            hash = hash & hash;
+        }
+        
+        // 結合螢幕解析度、色彩深度與硬體執行緒
+        const hwInfo = `${screen.width}x${screen.height}-${screen.colorDepth}-${navigator.hardwareConcurrency || 1}`;
+        return `dev_${Math.abs(hash)}_${btoa(hwInfo).slice(0, 15)}`;
+    }
+
+    let myFingerprint = getDeviceFingerprint();
+
+    // --- MR 系統 (支援浮點數加減) ---
     let myId = localStorage.getItem('anon_uid');
     let isNewUser = false;
     if (!myId) {
@@ -326,30 +359,19 @@
         isNewUser = true; 
     }
 
-    let myMR = parseInt(localStorage.getItem('anon_mr') || (isNewUser ? '75' : '100'), 10);
+    // 改為 parseFloat 支援小數點
+    let myMR = parseFloat(localStorage.getItem('anon_mr')) || (isNewUser ? 75 : 100);
     const saveMR = (val) => {
         myMR = Math.max(0, Math.min(100, val));
-        localStorage.setItem('anon_mr', myMR);
+        localStorage.setItem('anon_mr', myMR.toFixed(1));
     };
 
-    let myFingerprint = localStorage.getItem('anon_browser_fingerprint');
-    if (!myFingerprint) {
-        myFingerprint = 'fp_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
-        localStorage.setItem('anon_browser_fingerprint', myFingerprint);
-    }
-
-    // --- DevTool 主控台注入與 DarkFlux 組織版權警告 ---
-    console.log(
-        "%cDARKFLOW organization copyright owned.\n%cbe CAREFUL what you are going COPIES IN HERE, if you DONT KNOW WHAT IF YOU COPY AND WHAT HAPPENS, You will bear the consequences.",
-        "color: #FF3B30; font-size: 16px; font-weight: bold; font-family: monospace;",
-        "color: #FFF; background: #000; font-size: 12px; font-family: monospace; padding: 5px; border: 1px solid #FF3B30;"
-    );
-
-    // 開放 console 查詢 MR 指令：在控制台輸入 window.mr() 或 window.MR() 即可查看
-    window.mr = window.MR = function() {
-        console.log(`%c[SENTRY-SYS] Current MR: ${myMR}`, "color: #34C759; font-weight: bold; font-family: monospace;");
-        return myMR;
-    };
+    Object.defineProperty(window, 'mrShow', {
+        get: function() {
+            console.log(`[DARKFLOW-SYS] Current MR: ${myMR.toFixed(1)}`);
+            return myMR.toFixed(1);
+        }
+    });
 
     let currentRoomId = sessionStorage.getItem('anon_roomId'); 
     let currentOpponentId = null;
@@ -361,14 +383,12 @@
     let myMsgCount = 0;
     let opponentMsgCount = 0;
     let roomStartTime = 0;
-    
-    // --- 流量控制變數 ---
-    let msgTimestampLog = []; // 紀錄發言時間戳
-    let isThrottled = false;   // 是否觸發1.5秒限制
-    let throttleTimeout = null;
-    let lastMessageTime = 0;   // 上一次發言時間
-
     let initAllowQuit = false; 
+
+    let msgTimestamps = []; 
+    let isPenaltyMode = false;
+    let penaltyTimeout = null;
+    let lastPenaltyMessageTime = 0; 
 
     const statusText = document.getElementById('status-text');
     const dot = document.getElementById('dot');
@@ -386,41 +406,28 @@
     let viewer, viewerImg;
     let pressTimer;
 
-    // --- EtEMM (End-to-End Muted Mimic) 加密通訊核心 ---
-    let etemmKey = '';
-    function initEtEMM(roomId, oppId) {
-        // 混合雙方 UID 與房間 ID，生成本地動態對稱金鑰
-        const sortedIds = [myId, oppId].sort().join('');
-        etemmKey = btoa(sortedIds + roomId.substring(0, 12));
-    }
-
-    function etemmEncrypt(plainText) {
-        if (!etemmKey) return plainText;
-        let result = '';
-        for (let i = 0; i < plainText.length; i++) {
-            // 利用金鑰進行動態 XOR 混淆與字節位移
-            let charCode = plainText.charCodeAt(i) ^ etemmKey.charCodeAt(i % etemmKey.length);
-            result += String.fromCharCode(charCode);
-        }
-        return '0x_ee_' + btoa(unescape(encodeURIComponent(result))); // 加上加密標記
-    }
-
-    function etemmDecrypt(cipherText) {
-        if (!cipherText || !cipherText.startsWith('0x_ee_')) return cipherText;
-        if (!etemmKey) return '[Encryption Error: Missing Key]';
+    // --- 動態載入 AI NSFW 模型 (TensorFlow.js + NSFWJS) ---
+    let nsfwModel = null;
+    async function loadSentryAI() {
         try {
-            let base64Data = cipherText.substring(6);
-            let rawStr = decodeURIComponent(escape(atob(base64Data)));
-            let result = '';
-            for (let i = 0; i < rawStr.length; i++) {
-                let charCode = rawStr.charCodeAt(i) ^ etemmKey.charCodeAt(i % etemmKey.length);
-                result += String.fromCharCode(charCode);
-            }
-            return result;
-        } catch (e) {
-            return '[Decryption Failure]';
+            console.log("[DARKFLOW] Initializing SENTRY-V Vision Protocols...");
+            const tfScript = document.createElement('script');
+            tfScript.src = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js";
+            document.head.appendChild(tfScript);
+            await new Promise(r => tfScript.onload = r);
+
+            const nsfwScript = document.createElement('script');
+            nsfwScript.src = "https://cdn.jsdelivr.net/npm/nsfwjs@2.4.2/dist/nsfwjs.min.js";
+            document.head.appendChild(nsfwScript);
+            await new Promise(r => nsfwScript.onload = r);
+
+            nsfwModel = await nsfwjs.load();
+            console.log("[DARKFLOW] SENTRY-V Vision online. Strict filtering engaged.");
+        } catch (err) {
+            console.warn("[DARKFLOW] AI Core load failed, using fallback.", err);
         }
     }
+    loadSentryAI(); // 背景載入模型
 
     window.addEventListener('DOMContentLoaded', () => {
         viewer = document.getElementById('img-viewer');
@@ -487,19 +494,16 @@
     }
 
     function checkAndPunishSpamDisconnect() {
-        if (!sessionStorage.getItem('flux_session_alive')) {
-            return; 
-        }
+        if (!sessionStorage.getItem('flux_session_alive')) return; 
         if (!roomStartTime) return;
+
         const duration = (Date.now() - roomStartTime) / 1000;
         const totalMsg = myMsgCount + opponentMsgCount;
 
-        if (duration >= 5 && myMsgCount > 0 && opponentMsgCount === 0) {
-            return; 
-        }
-        if (totalMsg < 5 || duration < 10) {
-            saveMR(myMR - 15); 
-        }
+        if (duration >= 5 && myMsgCount > 0 && opponentMsgCount === 0) return; 
+        
+        // 降低懲罰：從 -15 改為 -5
+        if (totalMsg < 5 || duration < 10) saveMR(myMR - 5); 
     }
 
     async function startMatch() {
@@ -521,7 +525,7 @@
             
             for (let id in waiters) {
                 if (id === myId) continue;
-                if (waiters[id].fp === myFingerprint) continue; 
+                if (waiters[id].fp === myFingerprint) continue; // 硬體指紋比對，防無痕互連
                 if (id === blockedOpponent && (Date.now() - blockTime) < 15000) continue; 
                 
                 let oppMR = waiters[id].mr !== undefined ? waiters[id].mr : 100;
@@ -545,10 +549,6 @@
                 currentOpponentId = matchedId;
                 currentRoomId = waiters[matchedId].roomId;
                 await remove(ref(db, `waiting_pool/${matchedId}`));
-                
-                // 雙方確立，建立端到端加密金鑰
-                initEtEMM(currentRoomId, currentOpponentId);
-
                 await set(ref(db, `rooms/${currentRoomId}/guest`), myId);
                 await push(ref(db, `rooms/${currentRoomId}/messages`), { sender: "sys_sync", text: "1" });
                 sessionStorage.setItem('anon_roomId', currentRoomId);
@@ -557,7 +557,7 @@
             }
         } 
         
-        currentRoomId = `room_${myId}_${Date.now}`;
+        currentRoomId = `room_${myId}_${Date.now()}`;
         await set(ref(db, `waiting_pool/${myId}`), { roomId: currentRoomId, creatorId: myId, mr: myMR, fp: myFingerprint });
         onDisconnect(ref(db, `waiting_pool/${myId}`)).remove();
         
@@ -566,10 +566,6 @@
             if (snap.exists()) {
                 currentOpponentId = snap.val();
                 unsubscribe();
-                
-                // 創建方建立端到端加密金鑰
-                initEtEMM(currentRoomId, currentOpponentId);
-
                 sessionStorage.setItem('anon_roomId', currentRoomId);
                 beginChat(currentRoomId);
             }
@@ -593,7 +589,6 @@
         roomStartTime = Date.now();
 
         setTimeout(() => { initAllowQuit = true; }, 500);
-
         resetAfkTimer();
 
         setPresence('active');
@@ -633,20 +628,9 @@
                 handleDisconnect(false, false); 
                 return; 
             }
-            const rawMsgs = Object.entries(snap.val()).map(([key, val]) => ({key, ...val})).filter(m => m.sender !== "sys_sync");
+            const msgs = Object.entries(snap.val()).map(([key, val]) => ({key, ...val})).filter(m => m.sender !== "sys_sync");
             
-            if(rawMsgs.length > 0) {
-                resetAfkTimer();
-            }
-
-            // --- EtEMM 在接收端執行解密還原 ---
-            const msgs = rawMsgs.map(m => {
-                return {
-                    ...m,
-                    text: etemmDecrypt(m.text),
-                    replyTo: m.replyTo ? { ...m.replyTo, text: etemmDecrypt(m.replyTo.text) } : null
-                };
-            });
+            if(msgs.length > 0) resetAfkTimer();
 
             myMsgCount = msgs.filter(m => m.sender === myId).length;
             opponentMsgCount = msgs.filter(m => m.sender !== myId).length;
@@ -687,7 +671,6 @@
 
     quitBtn.onclick = async () => {
         if (!initAllowQuit) return; 
-
         checkAndPunishSpamDisconnect();
         if (currentRoomId) await remove(ref(db, `rooms/${currentRoomId}`));
         handleDisconnect(false, false);
@@ -726,22 +709,11 @@
                 ontouchstart="handleImagePress(event, '${m.text}')"
                 ontouchend="cancelPress()"
                 >`;
-
-                if (m.meta) {
-                    contentHtml += `
-                    <div style="font-size:11px;opacity:0.6;margin-top:4px;">
-                        ${m.meta.width}x${m.meta.height} • ${m.meta.sizeKB}KB
-                    </div>`;
-                }
             } else {
                 contentHtml += `${m.text}`;
             }
 
-            wrap.innerHTML = `
-            <div class="msg" onclick="setReply('${m.sender}', \`${m.text.replace(/`/g,'')}\`)">
-                ${contentHtml}
-            </div>`;
-            
+            wrap.innerHTML = `<div class="msg" onclick="setReply('${m.sender}', \`${m.text.replace(/`/g,'')}\`)">${contentHtml}</div>`;
             flowEl.appendChild(wrap);
         });
     }
@@ -759,122 +731,51 @@
         replyPreview.classList.remove('active');
     };
 
-    // --- 重構版二進位字節串流 NSFW 腥羶色圖片過濾器 ---
-    function isSensitiveImage(base64Str) {
-        if (!base64Str) return false;
-        try {
-            const parts = base64Str.split(',');
-            if (parts.length < 2) return false;
-            
-            const binaryStr = atob(parts[1]);
-            const len = binaryStr.length;
-            const buffer = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
-                buffer[i] = binaryStr.charCodeAt(i);
-            }
-
-            // 1. JPEG 特徵標頭與霍夫曼分佈防堵
-            let isJpeg = buffer[0] === 0xFF && buffer[1] === 0xD8;
-            let skinPixels = 0;
-            let totalChecked = 0;
-
-            // 2. 更深度的交叉字節採樣演算法
-            const step = len > 30000 ? Math.floor(len / 2000) : 8;
-            
-            // 排除檔案頭尾純壓縮資訊，直擊影像壓縮資料主體（15% 到 85% 區段）
-            for (let i = Math.floor(len * 0.15); i < len * 0.85; i += step) {
-                if (i + 3 >= len) break;
-                
-                let r = buffer[i];
-                let g = buffer[i+1];
-                let b = buffer[i+2];
-
-                totalChecked++;
-
-                // 深度修正人體組織色調閾值 (YCbCr 空間變體 RGB 加速篩選)
-                // 包含極高機率的敏感膚色集群區間
-                if (r > 105 && g > 55 && b > 35) {
-                    if (r > g && r > b && (r - g) > 12) {
-                        // 強化對粉嫩色、肉色與高暴露大面積陰影的交疊判斷
-                        let maxRGB = Math.max(r, g, b);
-                        let minRGB = Math.min(r, g, b);
-                        if ((maxRGB - minRGB) > 14) {
-                            skinPixels++;
-                        }
-                    }
-                }
-            }
-
-            const skinRatio = skinPixels / totalChecked;
-            
-            // 下修攔截閾值至 36%（更敏銳地捕捉未過濾的腥羶色色塊分佈）
-            if (skinRatio > 0.36) {
-                return true; 
-            }
-        } catch (e) {
-            console.error("SENTRY NSFW Engine Filter error: ", e);
-        }
-        return false;
-    }
-
     async function sendMessage(text, type = 'text', meta = null) {
         if (!text) return;
-
         const now = Date.now();
 
-        // --- 全新動態流量控制演算法 (移除每秒死限制) ---
-        // 清理 10 秒之前的發言紀錄
-        msgTimestampLog = msgTimestampLog.filter(ts => now - ts < 10000);
-
-        if (isThrottled) {
-            // 如果目前處於降速限制中，必須與上一次發言相隔 1.5 秒
-            if (now - lastMessageTime < 1500) {
-                alert("Throttled: High frequency activity detected. 1.5s interval enforced.");
+        if (isPenaltyMode) {
+            if (now - lastPenaltyMessageTime < 1500) {
+                statusText.innerText = "System: Cooldown active (1.5s)";
+                setTimeout(() => statusText.innerText = "Stranger is Active", 1500);
                 return;
             }
-        } else {
-            // 檢查過去 10 秒內是否發了超過 15 條訊息
-            if (msgTimestampLog.length >= 15) {
-                isThrottled = true;
-                alert("SENTRY Threat Alert: Influx rate exceeded. Throttling enabled for 6 seconds.");
-                
-                // 設定 6 秒後解除降速限制
-                clearTimeout(throttleTimeout);
-                throttleTimeout = setTimeout(() => {
-                    isThrottled = false;
-                    msgTimestampLog = []; // 解除後清空計數
-                }, 6000);
-
-                return;
-            }
+            lastPenaltyMessageTime = now;
         }
 
-        // 行為通過，記錄此次發言時間
-        msgTimestampLog.push(now);
-        lastMessageTime = now;
+        msgTimestamps = msgTimestamps.filter(ts => now - ts <= 10000);
+        msgTimestamps.push(now);
 
-        // NSFW 腥羶色二進位再度攔截
-        if (type === 'image' && isSensitiveImage(text)) {
-            alert("Upload blocked: Non-compliant content pattern detected.");
-            imageQueue = [];
-            renderImageQueue();
-            return;
+        if (msgTimestamps.length > 15 && !isPenaltyMode) {
+            isPenaltyMode = true;
+            lastPenaltyMessageTime = now;
+            clearTimeout(penaltyTimeout);
+            
+            statusText.innerText = "WARNING: Spam limit reached. Cooldown engaged.";
+            statusText.style.color = "#FF3B30";
+            
+            penaltyTimeout = setTimeout(() => {
+                isPenaltyMode = false;
+                msgTimestamps = [];
+                statusText.style.color = "";
+                statusText.innerText = "Stranger is Active";
+            }, 6000);
+            return; 
         }
 
-        // --- EtEMM 在發送端執行加密混淆 ---
-        const encryptedText = etemmEncrypt(text);
-
-        const payload = { sender: myId, text: encryptedText, type: type, ts: serverTimestamp() };
+        const payload = { sender: myId, text: text, type: type, ts: serverTimestamp() };
         if (meta) payload.meta = meta;
         if (replyTarget) {
-            // 回覆內容同樣需要 EtEMM 加密保護
-            payload.replyTo = { 
-                sender: replyTarget.sender, 
-                text: etemmEncrypt(replyTarget.text) 
-            };
+            payload.replyTo = replyTarget;
             document.getElementById('cancel-reply').click();
         }
+
         await push(ref(db, `rooms/${currentRoomId}/messages`), payload);
+        
+        // 成功發言，正向回饋 MR 增加 0.5
+        saveMR(myMR + 0.5);
+
         inputEl.value = '';
         setTyping(false);
     }
@@ -902,7 +803,7 @@
     const MAX_FILE_SIZE = 1024 * 1024; 
     const MAX_DIMENSION = 1024;
 
-    fileInput.addEventListener('change', (e) => {
+    fileInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
@@ -915,7 +816,7 @@
         const reader = new FileReader();
         reader.onload = (event) => {
             const img = new Image();
-            img.onload = () => {
+            img.onload = async () => {
                 let width = img.width;
                 let height = img.height;
 
@@ -931,13 +832,30 @@
                 canvas.height = height;
                 ctx.drawImage(img, 0, 0, width, height);
 
+                // --- 呼叫 SENTRY AI 判斷 ---
+                if (nsfwModel) {
+                    try {
+                        const predictions = await nsfwModel.classify(canvas);
+                        // 尋找高風險特徵：色情(Porn)、二次元成人(Hentai)、極度暴露(Sexy)
+                        const isViolating = predictions.some(p => 
+                            (p.className === 'Porn' || p.className === 'Hentai') && p.probability > 0.65 ||
+                            (p.className === 'Sexy' && p.probability > 0.85)
+                        );
+                        
+                        if (isViolating) {
+                            alert("Upload blocked: System AI detected Explicit/NSFW content.");
+                            fileInput.value = '';
+                            return;
+                        }
+                    } catch(err) {
+                        console.warn("AI Classification failed, proceeding safely.", err);
+                    }
+                } else {
+                    console.log("AI Model still loading... skipping rigorous check.");
+                }
+
                 const base64Data = canvas.toDataURL('image/jpeg', 0.7);
                 const id = Math.random().toString(36).slice(2);
-
-                if (isSensitiveImage(base64Data)) {
-                    alert("Upload blocked: Non-compliant content pattern detected.");
-                    return;
-                }
 
                 imageQueue.push({
                     id,
