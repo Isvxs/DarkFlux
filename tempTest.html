@@ -406,27 +406,38 @@
     let viewer, viewerImg;
     let pressTimer;
 
-    // --- 動態載入 AI NSFW 模型 (TensorFlow.js + NSFWJS) ---
-// --- 修正版 SENTRY-V AI 載入協定 ---
+ // --- 終極修正版 SENTRY-V AI 載入協定 (完美過濾 300+ 警告) ---
     let nsfwModel = null;
     async function loadSentryAI() {
+        // 備份原始的 console.warn
+        const originalWarn = console.warn;
+        
+        // 攔截並物理屏蔽 TensorFlow 的重複註冊警告
+        console.warn = function(...args) {
+            if (args[0] && typeof args[0] === 'string' && args[0].includes('already registered')) {
+                return; // 直接吃掉，不顯示在主控台
+            }
+            originalWarn.apply(console, args); // 正常的警告依然放行
+        };
+
         try {
             console.log("[DARKFLOW] Initializing SENTRY-V Vision Protocols...");
             
-            // 1. 僅載入 nsfwjs，不額外載入 tf.min.js 避免 kernel 註冊衝突
             const nsfwScript = document.createElement('script');
             nsfwScript.src = "https://cdn.jsdelivr.net/npm/nsfwjs@2.4.2/dist/nsfwjs.min.js";
             document.head.appendChild(nsfwScript);
             await new Promise(r => nsfwScript.onload = r);
 
-            // 2. 強制變更模型路徑至穩定的 unpkg cdn，避開已失效的 cloudfront 節點
-            // 同時指定 type 為 'graph' (MobileNetV2)，此模型對黑白、深膚色 NSFW 的特徵矩陣捕捉最精準
+            // 載入穩定鏡像模型
             nsfwModel = await nsfwjs.load('https://unpkg.com/nsfwjs@2.4.2/models/quant_mid/', { type: 'graph' });
             
             console.log("[DARKFLOW] SENTRY-V Vision online. Strict filtering engaged.");
         } catch (err) {
             console.warn("[DARKFLOW] AI Core load failed. Deploying fallback security canvas.", err);
-            setupFallbackScanner(); // 如果 CDN 被阻斷，自動降級啟動備用本地掃描
+            setupFallbackScanner();
+        } finally {
+            // 載入完成後，把 console.warn 還原，避免影響你後續其他程式碼的除錯
+            console.warn = originalWarn;
         }
     }
     loadSentryAI();
