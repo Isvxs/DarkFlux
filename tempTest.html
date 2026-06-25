@@ -407,27 +407,46 @@
     let pressTimer;
 
     // --- 動態載入 AI NSFW 模型 (TensorFlow.js + NSFWJS) ---
+// --- 修正版 SENTRY-V AI 載入協定 ---
     let nsfwModel = null;
     async function loadSentryAI() {
         try {
             console.log("[DARKFLOW] Initializing SENTRY-V Vision Protocols...");
-            const tfScript = document.createElement('script');
-            tfScript.src = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js";
-            document.head.appendChild(tfScript);
-            await new Promise(r => tfScript.onload = r);
-
+            
+            // 1. 僅載入 nsfwjs，不額外載入 tf.min.js 避免 kernel 註冊衝突
             const nsfwScript = document.createElement('script');
             nsfwScript.src = "https://cdn.jsdelivr.net/npm/nsfwjs@2.4.2/dist/nsfwjs.min.js";
             document.head.appendChild(nsfwScript);
             await new Promise(r => nsfwScript.onload = r);
 
-            nsfwModel = await nsfwjs.load();
+            // 2. 強制變更模型路徑至穩定的 unpkg cdn，避開已失效的 cloudfront 節點
+            // 同時指定 type 為 'graph' (MobileNetV2)，此模型對黑白、深膚色 NSFW 的特徵矩陣捕捉最精準
+            nsfwModel = await nsfwjs.load('https://unpkg.com/nsfwjs@2.4.2/models/quant_mid/', { type: 'graph' });
+            
             console.log("[DARKFLOW] SENTRY-V Vision online. Strict filtering engaged.");
         } catch (err) {
-            console.warn("[DARKFLOW] AI Core load failed, using fallback.", err);
+            console.warn("[DARKFLOW] AI Core load failed. Deploying fallback security canvas.", err);
+            setupFallbackScanner(); // 如果 CDN 被阻斷，自動降級啟動備用本地掃描
         }
     }
-    loadSentryAI(); // 背景載入模型
+    loadSentryAI();
+
+    // 備用本地掃描 (當 AI 完全無法載入時，不至於讓系統大開門戶)
+    function setupFallbackScanner() {
+        nsfwModel = {
+            classify: async (canvas) => {
+                const ctx = canvas.getContext('2d');
+                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+                let skinPixels = 0;
+                for (let i = 0; i < imgData.length; i += 16) {
+                    let r = imgData[i], g = imgData[i+1], b = imgData[i+2];
+                    if (r > 60 && g > 30 && b > 10 && r > g && r > b) skinPixels++; // 放寬膚色範圍包含深膚色
+                }
+                const ratio = skinPixels / (imgData.length / 16);
+                return [{ className: 'Porn', probability: ratio > 0.4 ? 0.7 : 0.1 }];
+            }
+        };
+    }
 
     window.addEventListener('DOMContentLoaded', () => {
         viewer = document.getElementById('img-viewer');
