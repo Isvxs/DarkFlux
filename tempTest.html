@@ -242,7 +242,6 @@
         .preview-item.spoiler img { filter: blur(10px); }
         .preview-actions { position: absolute; top: 2px; right: 2px; display: flex; gap: 4px; }
         .preview-actions button { background: rgba(0,0,0,0.6); border: none; color: white; font-size: 10px; cursor: pointer; border-radius: 4px; }
-        .version-text { display:none; }
     </style>
 <div class="powered-by">
     <div class="powered-text">Powered by</div>
@@ -329,6 +328,48 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
     import { getDatabase, ref, push, onValue, set, onDisconnect, remove, get, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
 
+    // 【安全性提升】使用模組局部作用域與 IIFE 徹底封鎖 MR 變數，杜絕 Console 訪問
+    const [getMR, saveMR] = (() => {
+        let currentMR = 50.0; // 預設基礎值
+        let localStorageAvailable = true;
+        
+        try {
+            const stored = localStorage.getItem('anon_mr');
+            if (stored !== null) {
+                let parsed = parseFloat(stored);
+                // 【核心要求】將所有大於 51 點的存檔，強制恢復調校至 50.0 
+                if (parsed > 51.0) {
+                    currentMR = 50.0;
+                    localStorage.setItem('anon_mr', '50.0');
+                } else {
+                    currentMR = parsed;
+                }
+            } else {
+                currentMR = 50.0;
+            }
+        } catch (e) {
+            localStorageAvailable = false;
+        }
+
+        return [
+            () => currentMR,
+            (val) => {
+                // 平衡性限制：落點於 0~100
+                currentMR = Math.max(0, Math.min(100, val));
+                if (localStorageAvailable) {
+                    try { localStorage.setItem('anon_mr', currentMR.toFixed(1)); } catch (e) {}
+                }
+                return currentMR;
+            }
+        ];
+    })();
+
+    // 全域僅提供唯讀界面呈現，Console 嘗試覆寫 mrShow 將不影響實際底層運行分數
+    Object.defineProperty(window, 'mrShow', {
+        get: () => getMR().toFixed(1),
+        configurable: false
+    });
+
     const DF_NOTICE = "%cDARKFLUX organization notice.";
     let _devtoolsOpen = false;
     let _devNoticeInterval = null;
@@ -387,7 +428,6 @@
     let myFingerprint = getDeviceFingerprint();
 
     let myId = null;
-    let isNewUser = false;
     let localStorageAvailable = true;
     try {
         myId = localStorage.getItem('anon_uid');
@@ -398,34 +438,7 @@
     if (!myId) {
         myId = Math.random().toString(36).substring(7);
         if (localStorageAvailable) try { localStorage.setItem('anon_uid', myId); } catch (e) { localStorageAvailable = false; }
-        isNewUser = true;
     }
-
-    let myMR = 75;
-    if (localStorageAvailable) {
-        try {
-            const stored = localStorage.getItem('anon_mr');
-            myMR = stored !== null ? parseFloat(stored) : (isNewUser ? 75 : 100);
-        } catch (e) {
-            localStorageAvailable = false;
-            myMR = 75;
-        }
-    } else {
-        myMR = isNewUser ? 75 : 75;
-    }
-
-    const saveMR = (val) => {
-        myMR = Math.max(0, Math.min(100, val));
-        if (localStorageAvailable) {
-            try { localStorage.setItem('anon_mr', myMR.toFixed(1)); } catch (e) { localStorageAvailable = false; }
-        }
-    };
-
-    Object.defineProperty(window, 'mrShow', {
-        get: function() {
-            return myMR.toFixed(1);
-        }
-    });
 
     const lastActiveTimes = {};
     let currentRoomId = sessionStorage.getItem('anon_roomId'); 
@@ -466,9 +479,7 @@
     async function loadSentryAI() {
         const originalWarn = console.warn;
         console.warn = function(...args) {
-            if (args[0] && typeof args[0] === 'string' && args[0].includes('already registered')) {
-                return;
-            }
+            if (args[0] && typeof args[0] === 'string' && args[0].includes('already registered')) return;
             originalWarn.apply(console, args);
         };
 
@@ -631,7 +642,9 @@
         const totalMsg = myMsgCount + opponentMsgCount;
 
         if (duration >= 5 && myMsgCount > 0 && opponentMsgCount === 0) return; 
-        if (totalMsg < 5 || duration < 10) saveMR(myMR - 5); 
+        
+        // 【平衡優化】降低秒退懲罰：原扣 5 點，下調至扣 1.5 點，防止 MR 跌速過快
+        if (totalMsg < 5 || duration < 10) saveMR(getMR() - 1.5); 
     }
 
     async function startMatch() {
@@ -656,8 +669,9 @@
                 if (waiters[id].fp === myFingerprint) continue; 
                 if (id === blockedOpponent && (Date.now() - blockTime) < 15000) continue; 
                 
-                let oppMR = waiters[id].mr !== undefined ? waiters[id].mr : 100;
-                if (Math.abs(myMR - oppMR) <= 20) { 
+                let oppMR = waiters[id].mr !== undefined ? waiters[id].mr : 50;
+                // 機制配合：以 50 分左右作為彈性對手撮合
+                if (Math.abs(getMR() - oppMR) <= 25) { 
                     matchedId = id;
                     break;
                 }
@@ -686,7 +700,7 @@
         } 
         
         currentRoomId = `room_${myId}_${Date.now()}`;
-        await set(ref(db, `waiting_pool/${myId}`), { roomId: currentRoomId, creatorId: myId, mr: myMR, fp: myFingerprint });
+        await set(ref(db, `waiting_pool/${myId}`), { roomId: currentRoomId, creatorId: myId, mr: getMR(), fp: myFingerprint });
         onDisconnect(ref(db, `waiting_pool/${myId}`)).remove();
         
         const guestRef = ref(db, `rooms/${currentRoomId}/guest`);
@@ -784,9 +798,12 @@
         }
 
         const duration = (Date.now() - roomStartTime) / 1000;
+        
+        // 【平衡優化】優化對手斷線時的補償與懲罰結構
         if (isStrangerLeave && duration >= 5 && myMsgCount > 0 && opponentMsgCount === 0) {
+            // 正常互動
         } else if (isStrangerLeave && (myMsgCount + opponentMsgCount) < 3) {
-            saveMR(myMR - 2); 
+            saveMR(getMR() - 0.5); // 緩和扣分幅度（從 2 下調至 0.5）
         }
 
         sessionStorage.removeItem('anon_roomId');
@@ -935,7 +952,9 @@
         }
 
         await push(ref(db, `rooms/${currentRoomId}/messages`), payload);
-        saveMR(myMR + 0.5);
+        
+        // 【平衡優化】加速正常互動的回分速度：將單條訊息加分由原 0.5 大幅提升至 1.5 點
+        saveMR(getMR() + 1.5);
 
         inputEl.value = '';
         setTyping(false);
