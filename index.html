@@ -304,6 +304,12 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
     import { getDatabase, ref, push, onValue, set, onDisconnect, remove, get, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
 
+    // --- 控制台專屬警告與指令 (DARKFLOW) ---
+    console.log(
+        "%cDARKFLOW organization copyright owned.\nbe CAREFUL what you are going COPIES IN HERE, if you DONT KNOW WHAT IF YOU COPY AND WHAT HAPPENS, You will bear the consequences.",
+        "color: #ff0000; font-size: 14px; font-weight: bold; background: #111; padding: 10px; display: block;"
+    );
+
     const firebaseConfig = {
         apiKey: "AIzaSyDhH-mST6_gPbOCJxFhJBe9FSK-iVYPmpw",
         authDomain: "plchat-69b04.firebaseapp.com",
@@ -317,17 +323,72 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
     
+    // --- 硬體與渲染特徵指紋 (防無痕互連) ---
+    function getDeviceFingerprint() {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        ctx.textBaseline = "top";
+        ctx.font = "14px 'Arial'";
+        ctx.fillStyle = "#f60";
+        ctx.fillRect(125,1,62,20);
+        ctx.fillStyle = "#069";
+        ctx.fillText("DARKFLOW_SENTRY", 2, 15);
+        ctx.fillStyle = "rgba(102, 204, 0, 0.7)";
+        ctx.fillText("DARKFLOW_SENTRY", 4, 17);
+        const b64 = canvas.toDataURL();
+        
+        let hash = 0;
+        for (let i = 0; i < b64.length; i++) {
+            hash = ((hash << 5) - hash) + b64.charCodeAt(i);
+            hash = hash & hash;
+        }
+        
+        // 結合螢幕解析度、色彩深度與硬體執行緒
+        const hwInfo = `${screen.width}x${screen.height}-${screen.colorDepth}-${navigator.hardwareConcurrency || 1}`;
+        return `dev_${Math.abs(hash)}_${btoa(hwInfo).slice(0, 15)}`;
+    }
+
+    let myFingerprint = getDeviceFingerprint();
+
+    // --- MR 系統 (支援浮點數加減) ---
     let myId = localStorage.getItem('anon_uid');
+    let isNewUser = false;
     if (!myId) {
         myId = Math.random().toString(36).substring(7);
         localStorage.setItem('anon_uid', myId);
+        isNewUser = true; 
     }
+
+    // 改為 parseFloat 支援小數點
+    let myMR = parseFloat(localStorage.getItem('anon_mr')) || (isNewUser ? 75 : 100);
+    const saveMR = (val) => {
+        myMR = Math.max(0, Math.min(100, val));
+        localStorage.setItem('anon_mr', myMR.toFixed(1));
+    };
+
+    Object.defineProperty(window, 'mrShow', {
+        get: function() {
+            console.log(`[DARKFLOW-SYS] Current MR: ${myMR.toFixed(1)}`);
+            return myMR.toFixed(1);
+        }
+    });
 
     let currentRoomId = sessionStorage.getItem('anon_roomId'); 
     let currentOpponentId = null;
     let replyTarget = null; 
-    let revealedImages = new Set(); // 記錄已經解碼的暴雷圖片
+    let revealedImages = new Set(); 
     let disconnectTimer = null;
+    let afkTimer = null; 
+
+    let myMsgCount = 0;
+    let opponentMsgCount = 0;
+    let roomStartTime = 0;
+    let initAllowQuit = false; 
+
+    let msgTimestamps = []; 
+    let isPenaltyMode = false;
+    let penaltyTimeout = null;
+    let lastPenaltyMessageTime = 0; 
 
     const statusText = document.getElementById('status-text');
     const dot = document.getElementById('dot');
@@ -345,10 +406,68 @@
     let viewer, viewerImg;
     let pressTimer;
 
+ // --- 終極修正版 SENTRY-V AI 載入協定 (完美過濾 300+ 警告) ---
+    let nsfwModel = null;
+    async function loadSentryAI() {
+        // 備份原始的 console.warn
+        const originalWarn = console.warn;
+        
+        // 攔截並物理屏蔽 TensorFlow 的重複註冊警告
+        console.warn = function(...args) {
+            if (args[0] && typeof args[0] === 'string' && args[0].includes('already registered')) {
+                return; // 直接吃掉，不顯示在主控台
+            }
+            originalWarn.apply(console, args); // 正常的警告依然放行
+        };
+
+        try {
+            console.log("[DARKFLOW] Initializing SENTRY-V Vision Protocols...");
+            
+            const nsfwScript = document.createElement('script');
+            nsfwScript.src = "https://cdn.jsdelivr.net/npm/nsfwjs@2.4.2/dist/nsfwjs.min.js";
+            document.head.appendChild(nsfwScript);
+            await new Promise(r => nsfwScript.onload = r);
+
+            // 載入穩定鏡像模型
+            nsfwModel = await nsfwjs.load('https://unpkg.com/nsfwjs@2.4.2/models/quant_mid/', { type: 'graph' });
+            
+            console.log("[DARKFLOW] SENTRY-V Vision online. Strict filtering engaged.");
+        } catch (err) {
+            console.warn("[DARKFLOW] AI Core load failed. Deploying fallback security canvas.", err);
+            setupFallbackScanner();
+        } finally {
+            // 載入完成後，把 console.warn 還原，避免影響你後續其他程式碼的除錯
+            console.warn = originalWarn;
+        }
+    }
+    loadSentryAI();
+
+    // 備用本地掃描 (當 AI 完全無法載入時，不至於讓系統大開門戶)
+    function setupFallbackScanner() {
+        nsfwModel = {
+            classify: async (canvas) => {
+                const ctx = canvas.getContext('2d');
+                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+                let skinPixels = 0;
+                for (let i = 0; i < imgData.length; i += 16) {
+                    let r = imgData[i], g = imgData[i+1], b = imgData[i+2];
+                    if (r > 60 && g > 30 && b > 10 && r > g && r > b) skinPixels++; // 放寬膚色範圍包含深膚色
+                }
+                const ratio = skinPixels / (imgData.length / 16);
+                return [{ className: 'Porn', probability: ratio > 0.4 ? 0.7 : 0.1 }];
+            }
+        };
+    }
+
     window.addEventListener('DOMContentLoaded', () => {
         viewer = document.getElementById('img-viewer');
         viewerImg = document.getElementById('viewer-img');
         viewer.onclick = () => viewer.classList.remove('active');
+        
+        setTimeout(() => {
+            sessionStorage.setItem('flux_session_alive', '1');
+        }, 500);
+
         init();
     });
 
@@ -356,6 +475,7 @@
         if (currentOpponentId) {
             localStorage.setItem('blockedOpponent', currentOpponentId);
             localStorage.setItem('blockTime', Date.now());
+            checkAndPunishSpamDisconnect();
         }
     });
 
@@ -389,11 +509,39 @@
         startMatch();
     }
 
+    function resetAfkTimer() {
+        clearTimeout(afkTimer);
+        afkTimer = setTimeout(() => {
+            handleAfkTimeout();
+        }, 60000); 
+    }
+
+    async function handleAfkTimeout() {
+        sessionStorage.removeItem('anon_roomId');
+        if (currentRoomId) await remove(ref(db, `rooms/${currentRoomId}`));
+        alert("Chat ended due to 60 seconds of inactivity.");
+        location.reload();
+    }
+
+    function checkAndPunishSpamDisconnect() {
+        if (!sessionStorage.getItem('flux_session_alive')) return; 
+        if (!roomStartTime) return;
+
+        const duration = (Date.now() - roomStartTime) / 1000;
+        const totalMsg = myMsgCount + opponentMsgCount;
+
+        if (duration >= 5 && myMsgCount > 0 && opponentMsgCount === 0) return; 
+        
+        // 降低懲罰：從 -15 改為 -5
+        if (totalMsg < 5 || duration < 10) saveMR(myMR - 5); 
+    }
+
     async function startMatch() {
         dot.style.background = '#FF9500'; 
         dot.style.boxShadow = '0 0 8px rgba(255, 149, 0, 0.6)';
-        statusText.innerText = 'Searching...';
+        statusText.innerText = `Searching...`; 
         quitBtn.style.display = 'none';
+        initAllowQuit = false; 
         
         let blockedOpponent = localStorage.getItem('blockedOpponent');
         let blockTime = parseInt(localStorage.getItem('blockTime') || '0', 10);
@@ -407,9 +555,24 @@
             
             for (let id in waiters) {
                 if (id === myId) continue;
-                if (id === blockedOpponent && (Date.now() - blockTime) < 15000) continue; // 15秒防重連
-                matchedId = id;
-                break;
+                if (waiters[id].fp === myFingerprint) continue; // 硬體指紋比對，防無痕互連
+                if (id === blockedOpponent && (Date.now() - blockTime) < 15000) continue; 
+                
+                let oppMR = waiters[id].mr !== undefined ? waiters[id].mr : 100;
+                if (Math.abs(myMR - oppMR) <= 20) { 
+                    matchedId = id;
+                    break;
+                }
+            }
+            
+            if (!matchedId) {
+                for (let id in waiters) {
+                    if (id === myId) continue;
+                    if (waiters[id].fp === myFingerprint) continue; 
+                    if (id === blockedOpponent && (Date.now() - blockTime) < 15000) continue;
+                    matchedId = id;
+                    break;
+                }
             }
             
             if (matchedId) {
@@ -425,7 +588,7 @@
         } 
         
         currentRoomId = `room_${myId}_${Date.now()}`;
-        await set(ref(db, `waiting_pool/${myId}`), { roomId: currentRoomId, creatorId: myId });
+        await set(ref(db, `waiting_pool/${myId}`), { roomId: currentRoomId, creatorId: myId, mr: myMR, fp: myFingerprint });
         onDisconnect(ref(db, `waiting_pool/${myId}`)).remove();
         
         const guestRef = ref(db, `rooms/${currentRoomId}/guest`);
@@ -451,7 +614,13 @@
         inputWrap.classList.remove('hidden');
         quitBtn.style.display = 'block';
 
-        // 監聽網頁活躍狀態
+        myMsgCount = 0;
+        opponentMsgCount = 0;
+        roomStartTime = Date.now();
+
+        setTimeout(() => { initAllowQuit = true; }, 500);
+        resetAfkTimer();
+
         setPresence('active');
         onDisconnect(ref(db, `rooms/${roomId}/presence/${myId}`)).set('offline');
 
@@ -459,18 +628,16 @@
         window.addEventListener('focus', () => setPresence('active'));
         window.addEventListener('blur', () => setPresence('away'));
 
-        // 監聽對方的狀態
         onValue(ref(db, `rooms/${roomId}/presence`), (snap) => {
             if (snap.exists() && currentOpponentId) {
                 const states = snap.val();
                 const oppState = states[currentOpponentId];
                 
                 if (oppState === 'offline') {
-                    // 若對方斷線 (關閉網頁或F5)，給予4秒緩衝避免F5直接斷掉
                     dot.style.background = '#FF3B30'; 
                     dot.style.boxShadow = '0 0 8px rgba(255, 59, 48, 0.6)';
                     statusText.innerText = "Stranger disconnected...";
-                    disconnectTimer = setTimeout(() => handleDisconnect(), 4000);
+                    disconnectTimer = setTimeout(() => handleDisconnect(true, true), 4000);
                 } else if (oppState) {
                     clearTimeout(disconnectTimer);
                     if (oppState === 'active') {
@@ -486,13 +653,18 @@
             }
         });
 
-        // 監聽訊息與房間銷毀
         onValue(ref(db, `rooms/${roomId}/messages`), (snap) => {
             if (!snap.exists()) { 
-                handleDisconnect(false); // 房間被銷毀(對方Quit)，瞬間踢出
+                handleDisconnect(false, false); 
                 return; 
             }
             const msgs = Object.entries(snap.val()).map(([key, val]) => ({key, ...val})).filter(m => m.sender !== "sys_sync");
+            
+            if(msgs.length > 0) resetAfkTimer();
+
+            myMsgCount = msgs.filter(m => m.sender === myId).length;
+            opponentMsgCount = msgs.filter(m => m.sender !== myId).length;
+            
             updateUI(msgs.slice(-50));
         });
 
@@ -505,11 +677,21 @@
         });
     }
 
-    async function handleDisconnect(showPopup = true) {
+    async function handleDisconnect(showPopup = true, isStrangerLeave = false) {
+        clearTimeout(afkTimer); 
+
         if (currentOpponentId) {
             localStorage.setItem('blockedOpponent', currentOpponentId);
             localStorage.setItem('blockTime', Date.now());
         }
+
+        const duration = (Date.now() - roomStartTime) / 1000;
+        if (isStrangerLeave && duration >= 5 && myMsgCount > 0 && opponentMsgCount === 0) {
+            // 無痛釋放
+        } else if (isStrangerLeave && (myMsgCount + opponentMsgCount) < 3) {
+            saveMR(myMR - 2); 
+        }
+
         sessionStorage.removeItem('anon_roomId');
         if (currentRoomId) remove(ref(db, `rooms/${currentRoomId}`));
         
@@ -518,8 +700,10 @@
     }
 
     quitBtn.onclick = async () => {
+        if (!initAllowQuit) return; 
+        checkAndPunishSpamDisconnect();
         if (currentRoomId) await remove(ref(db, `rooms/${currentRoomId}`));
-        handleDisconnect(false);
+        handleDisconnect(false, false);
     };
 
     function updateUI(msgs) {
@@ -542,7 +726,6 @@
                 let spoilerClass = '';
                 if (m.meta && m.meta.spoiler) {
                     spoilerClass = 'spoiler-blur';
-                    // 若這張圖片已經被點開過，直接解除模糊
                     if (revealedImages.has(m.key)) spoilerClass += ' revealed';
                 }
 
@@ -556,22 +739,11 @@
                 ontouchstart="handleImagePress(event, '${m.text}')"
                 ontouchend="cancelPress()"
                 >`;
-
-                if (m.meta) {
-                    contentHtml += `
-                    <div style="font-size:11px;opacity:0.6;margin-top:4px;">
-                        ${m.meta.width}x${m.meta.height} • ${m.meta.sizeKB}KB
-                    </div>`;
-                }
             } else {
                 contentHtml += `${m.text}`;
             }
 
-            wrap.innerHTML = `
-            <div class="msg" onclick="setReply('${m.sender}', \`${m.text.replace(/`/g,'')}\`)">
-                ${contentHtml}
-            </div>`;
-            
+            wrap.innerHTML = `<div class="msg" onclick="setReply('${m.sender}', \`${m.text.replace(/`/g,'')}\`)">${contentHtml}</div>`;
             flowEl.appendChild(wrap);
         });
     }
@@ -591,13 +763,49 @@
 
     async function sendMessage(text, type = 'text', meta = null) {
         if (!text) return;
+        const now = Date.now();
+
+        if (isPenaltyMode) {
+            if (now - lastPenaltyMessageTime < 1500) {
+                statusText.innerText = "System: Cooldown active (1.5s)";
+                setTimeout(() => statusText.innerText = "Stranger is Active", 1500);
+                return;
+            }
+            lastPenaltyMessageTime = now;
+        }
+
+        msgTimestamps = msgTimestamps.filter(ts => now - ts <= 10000);
+        msgTimestamps.push(now);
+
+        if (msgTimestamps.length > 15 && !isPenaltyMode) {
+            isPenaltyMode = true;
+            lastPenaltyMessageTime = now;
+            clearTimeout(penaltyTimeout);
+            
+            statusText.innerText = "WARNING: Spam limit reached. Cooldown engaged.";
+            statusText.style.color = "#FF3B30";
+            
+            penaltyTimeout = setTimeout(() => {
+                isPenaltyMode = false;
+                msgTimestamps = [];
+                statusText.style.color = "";
+                statusText.innerText = "Stranger is Active";
+            }, 6000);
+            return; 
+        }
+
         const payload = { sender: myId, text: text, type: type, ts: serverTimestamp() };
         if (meta) payload.meta = meta;
         if (replyTarget) {
             payload.replyTo = replyTarget;
             document.getElementById('cancel-reply').click();
         }
+
         await push(ref(db, `rooms/${currentRoomId}/messages`), payload);
+        
+        // 成功發言，正向回饋 MR 增加 0.5
+        saveMR(myMR + 0.5);
+
         inputEl.value = '';
         setTyping(false);
     }
@@ -625,7 +833,7 @@
     const MAX_FILE_SIZE = 1024 * 1024; 
     const MAX_DIMENSION = 1024;
 
-    fileInput.addEventListener('change', (e) => {
+    fileInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
@@ -638,7 +846,7 @@
         const reader = new FileReader();
         reader.onload = (event) => {
             const img = new Image();
-            img.onload = () => {
+            img.onload = async () => {
                 let width = img.width;
                 let height = img.height;
 
@@ -653,6 +861,28 @@
                 canvas.width = width;
                 canvas.height = height;
                 ctx.drawImage(img, 0, 0, width, height);
+
+                // --- 呼叫 SENTRY AI 判斷 ---
+                if (nsfwModel) {
+                    try {
+                        const predictions = await nsfwModel.classify(canvas);
+                        // 尋找高風險特徵：色情(Porn)、二次元成人(Hentai)、極度暴露(Sexy)
+                        const isViolating = predictions.some(p => 
+                            (p.className === 'Porn' || p.className === 'Hentai') && p.probability > 0.65 ||
+                            (p.className === 'Sexy' && p.probability > 0.85)
+                        );
+                        
+                        if (isViolating) {
+                            alert("Upload blocked: System AI detected Explicit/NSFW content.");
+                            fileInput.value = '';
+                            return;
+                        }
+                    } catch(err) {
+                        console.warn("AI Classification failed, proceeding safely.", err);
+                    }
+                } else {
+                    console.log("AI Model still loading... skipping rigorous check.");
+                }
 
                 const base64Data = canvas.toDataURL('image/jpeg', 0.7);
                 const id = Math.random().toString(36).slice(2);
@@ -679,7 +909,7 @@
         event.stopPropagation(); 
         if (el.classList.contains('spoiler-blur') && !el.classList.contains('revealed')) {
             el.classList.add('revealed');
-            if (msgKey) revealedImages.add(msgKey); // 記錄此訊息ID為已解碼
+            if (msgKey) revealedImages.add(msgKey); 
             return;
         }
         viewerImg.src = src;
@@ -718,7 +948,6 @@
         imageQueue = imageQueue.filter(i => i.id !== id);
         renderImageQueue();
     };
-
 </script>
 </body>
 </html>
