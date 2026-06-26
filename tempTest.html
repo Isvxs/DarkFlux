@@ -84,10 +84,9 @@
             font-weight: bold;
             cursor: pointer;
             display: none;
-            transition: opacity 0.2s;
-            display: flex;
             align-items: center;
             gap: 6px;
+            transition: opacity 0.2s;
         }
         #quit-btn i {
             width: 16px;
@@ -224,7 +223,7 @@
         .btn-icon:hover { color: var(--fg); }
         .btn-icon.send-button { font-size: 20px; }
         
-        .btn-icon.send-button.cooldown svg { animation: spin-ccw 1s linear infinite; color: #FF3B30; }
+        .btn-icon.send-button.cooldown i { animation: spin-ccw 1s linear infinite; color: #FF3B30; }
         @keyframes spin-ccw { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
 
         .input-wrapper { flex: 1; background: var(--stranger-bg); border-radius: 20px; padding: 10px 18px; display: flex; align-items: center; }
@@ -328,7 +327,6 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
     import { getDatabase, ref, push, onValue, set, onDisconnect, remove, get, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
 
-    // 使用局部封閉範疇 IIFE 鎖死核心變數，防止外掛或開發者工具覆寫
     const [getMR, saveMR] = (() => {
         let currentMR = 50.0;
         let localStorageAvailable = true;
@@ -337,7 +335,6 @@
             const stored = localStorage.getItem('anon_mr');
             if (stored !== null) {
                 let parsed = parseFloat(stored);
-                // 【核心指令】MR > 51 分的用戶存檔，強制在載入時調校校準至基础值 50.0 點
                 if (parsed > 51.0) {
                     currentMR = 50.0;
                     localStorage.setItem('anon_mr', '50.0');
@@ -363,7 +360,6 @@
         ];
     })();
 
-    // 全域僅暴露唯讀界面，Console 端隨意修改 window.mrShow 也不影響底層配對運算
     Object.defineProperty(window, 'mrShow', {
         get: () => getMR().toFixed(1),
         configurable: false
@@ -474,6 +470,17 @@
     let pressTimer;
     let selectingImage = false;
 
+    // 【核心修正】獨立提取渲染，防範非同步阻塞
+    function triggerLucideRefresh() {
+        try {
+            if (window.lucide && typeof lucide.replace === 'function') {
+                lucide.replace();
+            }
+        } catch(e) {
+            // 静默降级，不阻塞核心业务
+        }
+    }
+
     let nsfwModel = null;
     async function loadSentryAI() {
         const originalWarn = console.warn;
@@ -493,9 +500,7 @@
                 try {
                     await tf.setBackend('cpu');
                     console.log("[DARKFLUX] Hardware restriction detected. Switched SENTRY-V to CPU Mode.");
-                } catch(e) {
-                    console.log("[DARKFLUX] TF backend configuration skipped.");
-                }
+                } catch(e) {}
             }
 
             const modelPath = 'https://bgh7.github.io/nsfwjs-models/quant_mid/';
@@ -506,6 +511,7 @@
             setupFallbackScanner();
         } finally {
             console.warn = originalWarn;
+            triggerLucideRefresh(); // 確保非同步鏈完結時刷新
         }
     }
 
@@ -529,7 +535,9 @@
                 }
             }
         };
+        triggerLucideRefresh(); // 部署 Fallback 時也強制執行一次渲染
     }
+
     loadSentryAI();
 
     function setSendIcon(iconName, isCooldown) {
@@ -541,7 +549,7 @@
             } else {
                 btn.classList.remove('cooldown');
             }
-            if (window.lucide && typeof lucide.replace === 'function') lucide.replace();
+            triggerLucideRefresh();
         }
     }
 
@@ -554,7 +562,7 @@
             sessionStorage.setItem('flux_session_alive', '1');
         }, 500);
 
-        try { if (window.lucide && typeof lucide.replace === 'function') lucide.replace(); } catch(e){}
+        triggerLucideRefresh(); // DOM 載入後立刻執行首次高優先級渲染
 
         const progress = document.getElementById('page-progress');
         let loading = 0;
@@ -568,6 +576,7 @@
         window.addEventListener('load', () => {
             progress.style.width = '100%';
             setTimeout(() => { progress.style.opacity = '0'; }, 250);
+            triggerLucideRefresh(); // 確保一切靜態資源加載完成後再次整理
         });
 
         init();
@@ -642,7 +651,6 @@
 
         if (duration >= 5 && myMsgCount > 0 && opponentMsgCount === 0) return; 
         
-        // 【平衡平衡修正】秒退惩罚平缓化，降低跌幅速（從 5.0 下調至 1.5 點）
         if (totalMsg < 5 || duration < 10) saveMR(getMR() - 1.5); 
     }
 
@@ -650,6 +658,7 @@
         dot.style.background = '#FF9500'; 
         dot.style.boxShadow = '0 0 8px rgba(255, 149, 0, 0.6)';
         statusText.innerText = `Searching...`; 
+        statusText.style.color = ""; // 保持白/灰，字體絕不變紅
         quitBtn.style.display = 'none';
         initAllowQuit = false; 
         
@@ -724,6 +733,7 @@
         document.getElementById('sys-msg').style.display = 'none';
         inputWrap.classList.remove('hidden');
         quitBtn.style.display = 'flex'; 
+        triggerLucideRefresh(); // 進入房間時無條件強制渲染
 
         myMsgCount = 0;
         opponentMsgCount = 0;
@@ -748,9 +758,11 @@
                     dot.style.background = '#FF3B30'; 
                     dot.style.boxShadow = '0 0 8px rgba(255, 59, 48, 0.6)';
                     statusText.innerText = "Stranger disconnected...";
+                    statusText.style.color = ""; // 不變紅
                     disconnectTimer = setTimeout(() => handleDisconnect(true, true), 4000);
                 } else if (oppState) {
                     clearTimeout(disconnectTimer);
+                    statusText.style.color = ""; // 確保任何狀態下字體皆不變紅
                     if (oppState === 'active') {
                         lastActiveTimes[currentOpponentId] = Date.now();
                         dot.style.background = '#34C759'; 
@@ -797,7 +809,6 @@
 
         const duration = (Date.now() - roomStartTime) / 1000;
         
-        // 【平衡優化】降低非正常退出對局時的扣分（從 2.0 降至 0.5 點）
         if (isStrangerLeave && duration >= 5 && myMsgCount > 0 && opponentMsgCount === 0) {
         } else if (isStrangerLeave && (myMsgCount + opponentMsgCount) < 3) {
             saveMR(getMR() - 0.5); 
@@ -908,6 +919,7 @@
         if (isPenaltyMode) {
             if (now - lastPenaltyMessageTime < 1500) {
                 statusText.innerText = "System: Cooldown active (1.5s)";
+                statusText.style.color = ""; // 絕不變紅
                 setSendIcon('rotate-ccw', true);
                 
                 setTimeout(() => {
@@ -928,13 +940,12 @@
             clearTimeout(penaltyTimeout);
             
             statusText.innerText = "WARNING: Spam limit reached. Cooldown engaged.";
-            statusText.style.color = "#FF3B30";
+            statusText.style.color = ""; // 保持原有主題色，不變紅
             setSendIcon('rotate-ccw', true);
             
             penaltyTimeout = setTimeout(() => {
                 isPenaltyMode = false;
                 msgTimestamps = [];
-                statusText.style.color = "";
                 statusText.innerText = "Stranger is Active";
                 setSendIcon('send', false);
             }, 6000);
@@ -950,7 +961,6 @@
 
         await push(ref(db, `rooms/${currentRoomId}/messages`), payload);
         
-        // 【平衡優化】大幅拉高互動時的回分增益，從 0.5 點大幅提升至 1.5 點
         saveMR(getMR() + 1.5);
 
         inputEl.value = '';
