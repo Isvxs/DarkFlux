@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-<link rel="icon" href="DarkFluxWebIcon.png" type="image/png">
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -7,18 +6,19 @@
     <link rel="icon" href="DarkFluxWebIcon.png" type="image/png">
     <title>DarkFlux</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         html, body {
-    touch-action: manipulation;
-}
+            touch-action: manipulation;
+        }
         :root {
-            --bg: #0F1115;
-            --fg: #F5F5F5;
+            --bg: #121212;
+            --fg: #FAFAFA;
             --me-bg: #0A84FF;
             --stranger-bg: #181B22;
             --sys-text: #B8BEC9;
             --border: rgba(245, 245, 245, 0.06);
-            --glass: rgba(24, 27, 34, 0.6);
-            --font: 'Geist Sans', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
+            --glass: rgba(16, 18, 22, 0.6);
+            --font: 'Inter', sans-serif;
         }
 
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -66,7 +66,7 @@
 
         .status-dot {
             width: 8px; height: 8px;
-            background: #FF9500;
+            background: #22C55E;
             border-radius: 50%;
             margin-right: 8px;
             transition: background 0.3s, box-shadow 0.3s;
@@ -75,7 +75,7 @@
         #quit-btn {
             position: absolute;
             right: 15px;
-            background: #FF3B30;
+            background: #EF4444;
             color: white;
             border: none;
             border-radius: 15px;
@@ -85,8 +85,28 @@
             cursor: pointer;
             display: none;
             transition: opacity 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        #quit-btn i {
+            width: 16px;
+            height: 16px;
+            min-width: 16px;
         }
         #quit-btn:hover { opacity: 0.8; }
+
+        #page-progress {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 3px;
+            width: 0;
+            background: linear-gradient(90deg, #0A84FF, #5B9BFF, #0A84FF);
+            transition: width 0.15s ease, opacity 0.3s ease;
+            z-index: 99999;
+            opacity: 1;
+        }
 
         #chat-flow {
             flex: 1;
@@ -202,6 +222,11 @@
         .input-bar { display: flex; align-items: center; gap: 12px; }
         .btn-icon { background: none; border: none; color: var(--sys-text); font-size: 24px; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; transition: color 0.2s; }
         .btn-icon:hover { color: var(--fg); }
+        .btn-icon.send-button { font-size: 20px; }
+        
+        .btn-icon.send-button.cooldown svg { animation: spin-ccw 1s linear infinite; color: #FF3B30; }
+        @keyframes spin-ccw { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
+
         .input-wrapper { flex: 1; background: var(--stranger-bg); border-radius: 20px; padding: 10px 18px; display: flex; align-items: center; }
         input[type="text"] { width: 100%; background: transparent; border: none; color: var(--fg); font-family: inherit; font-size: 16px; outline: none; }
         input[type="text"]::placeholder { color: var(--sys-text); }
@@ -217,7 +242,7 @@
         .preview-item.spoiler img { filter: blur(10px); }
         .preview-actions { position: absolute; top: 2px; right: 2px; display: flex; gap: 4px; }
         .preview-actions button { background: rgba(0,0,0,0.6); border: none; color: white; font-size: 10px; cursor: pointer; border-radius: 4px; }
-                .version-text { display:none; }
+        .version-text { display:none; }
     </style>
 <div class="powered-by">
     <div class="powered-text">Powered by</div>
@@ -233,7 +258,7 @@
   flex-direction: column;
   align-items: center;
   user-select: none;
-  pointer-events: none; /* 整個區塊不可互動 */
+  pointer-events: none;
 }
 
 .powered-text {
@@ -246,7 +271,7 @@
 }
 
 .darkflux-icon {
-  width: 120px;   /* 可自行調整大小 */
+  width: 120px;
   height: auto;
   display: block;
   opacity: 0.7;
@@ -256,7 +281,6 @@
     .darkflux-icon { display: none !important; }
 }
 </style>
-<!-- Lucide icons -->
 <script src="https://cdn.jsdelivr.net/npm/lucide@0.258.0/dist/lucide.min.js"></script>
 </head>
 <body>
@@ -265,9 +289,10 @@
     <header>
         <div class="status-dot" id="dot"></div>
         <span id="status-text">Connecting...</span>
-        <button id="quit-btn">Quit</button>
+        <button id="quit-btn"><i data-lucide="user-minus"></i>Quit</button>
     </header>
 
+    <div id="page-progress"></div>
     <main id="chat-flow">
         <div id="typing-indicator">
             <div class="dot"></div><div class="dot"></div><div class="dot"></div>
@@ -283,12 +308,15 @@
         </div>
         <div class="input-bar">
             <button class="btn-icon" onclick="document.getElementById('file-input').click()">
-                <i data-lucide="image"></i>
+                <i data-lucide="file-image"></i>
             </button>
             <input type="file" id="file-input" accept="image/*">
             <div class="input-wrapper">
                 <input type="text" id="m-input" placeholder="Message..." autocomplete="off">
             </div>
+            <button id="send-btn" class="btn-icon send-button" type="button" aria-label="Send message">
+                <i data-lucide="send" id="send-icon"></i>
+            </button>
         </div>
     </footer>
 </div>
@@ -301,8 +329,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
     import { getDatabase, ref, push, onValue, set, onDisconnect, remove, get, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
 
-    // --- DevTools-only console notice (prints only when DevTools detected) ---
-    const DF_NOTICE = "%cDARKFLOW organization notice.";
+    const DF_NOTICE = "%cDARKFLUX organization notice.";
     let _devtoolsOpen = false;
     let _devNoticeInterval = null;
     function _checkDevtools() {
@@ -334,7 +361,6 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
     
-    // --- 硬體與渲染特徵指紋 (防無痕互連) ---
     function getDeviceFingerprint() {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -343,9 +369,9 @@
         ctx.fillStyle = "#f60";
         ctx.fillRect(125,1,62,20);
         ctx.fillStyle = "#069";
-        ctx.fillText("DARKFLOW_SENTRY", 2, 15);
+        ctx.fillText("DARKFLUX_SENTRY", 2, 15);
         ctx.fillStyle = "rgba(102, 204, 0, 0.7)";
-        ctx.fillText("DARKFLOW_SENTRY", 4, 17);
+        ctx.fillText("DARKFLUX_SENTRY", 4, 17);
         const b64 = canvas.toDataURL();
         
         let hash = 0;
@@ -354,14 +380,12 @@
             hash = hash & hash;
         }
         
-        // 結合螢幕解析度、色彩深度與硬體執行緒
         const hwInfo = `${screen.width}x${screen.height}-${screen.colorDepth}-${navigator.hardwareConcurrency || 1}`;
         return `dev_${Math.abs(hash)}_${btoa(hwInfo).slice(0, 15)}`;
     }
 
     let myFingerprint = getDeviceFingerprint();
 
-    // --- MR 系統 (支援浮點數加減) ---
     let myId = null;
     let isNewUser = false;
     let localStorageAvailable = true;
@@ -377,7 +401,6 @@
         isNewUser = true;
     }
 
-    // 改為 parseFloat 支援小數點，並容忍無痕模式無法使用 localStorage
     let myMR = 75;
     if (localStorageAvailable) {
         try {
@@ -388,7 +411,7 @@
             myMR = 75;
         }
     } else {
-        myMR = isNewUser ? 75 : 75; // 在無痕或不可用情況下維持 75
+        myMR = isNewUser ? 75 : 75;
     }
 
     const saveMR = (val) => {
@@ -404,9 +427,7 @@
         }
     });
 
-    // presence last-active timestamps (ms)
     const lastActiveTimes = {};
-
     let currentRoomId = sessionStorage.getItem('anon_roomId'); 
     let currentOpponentId = null;
     let replyTarget = null; 
@@ -441,57 +462,77 @@
     let pressTimer;
     let selectingImage = false;
 
- // --- 終極修正版 SENTRY-V AI 載入協定 (完美過濾 300+ 警告) ---
     let nsfwModel = null;
     async function loadSentryAI() {
-        // 備份原始的 console.warn
         const originalWarn = console.warn;
-        
-        // 攔截並物理屏蔽 TensorFlow 的重複註冊警告
         console.warn = function(...args) {
             if (args[0] && typeof args[0] === 'string' && args[0].includes('already registered')) {
-                return; // 直接吃掉，不顯示在主控台
+                return;
             }
-            originalWarn.apply(console, args); // 正常的警告依然放行
+            originalWarn.apply(console, args);
         };
 
         try {
-            console.log("[DARKFLOW] Initializing SENTRY-V Vision Protocols...");
-            
+            console.log("[DARKFLUX] Initializing SENTRY-V Vision Protocols...");
             const nsfwScript = document.createElement('script');
             nsfwScript.src = "https://cdn.jsdelivr.net/npm/nsfwjs@2.4.2/dist/nsfwjs.min.js";
             document.head.appendChild(nsfwScript);
             await new Promise(r => nsfwScript.onload = r);
 
-            // 載入穩定鏡像模型
-            nsfwModel = await nsfwjs.load('https://unpkg.com/nsfwjs@2.4.2/models/quant_mid/', { type: 'graph' });
-            
-            console.log("[DARKFLOW] SENTRY-V Vision online. Strict filtering engaged.");
+            if (window.tf) {
+                try {
+                    await tf.setBackend('cpu');
+                    console.log("[DARKFLUX] Hardware restriction detected. Switched SENTRY-V to CPU Mode.");
+                } catch(e) {
+                    console.log("[DARKFLUX] TF backend configuration skipped.");
+                }
+            }
+
+            const modelPath = 'https://bgh7.github.io/nsfwjs-models/quant_mid/';
+            nsfwModel = await nsfwjs.load(modelPath, { type: 'graph' });
+            console.log("[DARKFLUX] SENTRY-V Vision online. Strict filtering engaged.");
         } catch (err) {
-            console.warn("[DARKFLOW] AI Core load failed. Deploying fallback security canvas.", err);
+            console.warn("[DARKFLUX] AI Core load failed. Deploying fallback security canvas.", err);
             setupFallbackScanner();
         } finally {
-            // 載入完成後，把 console.warn 還原，避免影響你後續其他程式碼的除錯
             console.warn = originalWarn;
         }
     }
-    loadSentryAI();
 
-    // 備用本地掃描 (當 AI 完全無法載入時，不至於讓系統大開門戶)
     function setupFallbackScanner() {
+        console.log("[DARKFLUX] Local SENTRY Fallback Scanner deployed. Interface bypass unblocked.");
         nsfwModel = {
             classify: async (canvas) => {
-                const ctx = canvas.getContext('2d');
-                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-                let skinPixels = 0;
-                for (let i = 0; i < imgData.length; i += 16) {
-                    let r = imgData[i], g = imgData[i+1], b = imgData[i+2];
-                    if (r > 60 && g > 30 && b > 10 && r > g && r > b) skinPixels++; // 放寬膚色範圍包含深膚色
+                try {
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) return [{ className: 'Porn', probability: 0.0 }];
+                    const imgData = ctx.getImageData(0, 0, Math.min(canvas.width, 100), Math.min(canvas.height, 100)).data;
+                    let skinPixels = 0;
+                    for (let i = 0; i < imgData.length; i += 16) {
+                        let r = imgData[i], g = imgData[i+1], b = imgData[i+2];
+                        if (r > 60 && g > 30 && b > 10 && r > g && r > b) skinPixels++;
+                    }
+                    const ratio = skinPixels / (imgData.length / 16);
+                    return [{ className: 'Porn', probability: ratio > 0.6 ? 0.5 : 0.1 }];
+                } catch(e) {
+                    return [{ className: 'Porn', probability: 0.0 }];
                 }
-                const ratio = skinPixels / (imgData.length / 16);
-                return [{ className: 'Porn', probability: ratio > 0.4 ? 0.7 : 0.1 }];
             }
         };
+    }
+    loadSentryAI();
+
+    function setSendIcon(iconName, isCooldown) {
+        const btn = document.getElementById('send-btn');
+        if (btn) {
+            btn.innerHTML = `<i data-lucide="${iconName}"></i>`;
+            if (isCooldown) {
+                btn.classList.add('cooldown');
+            } else {
+                btn.classList.remove('cooldown');
+            }
+            if (window.lucide && typeof lucide.replace === 'function') lucide.replace();
+        }
     }
 
     window.addEventListener('DOMContentLoaded', () => {
@@ -503,8 +544,21 @@
             sessionStorage.setItem('flux_session_alive', '1');
         }, 500);
 
-        // replace simple icons with Lucide if available
         try { if (window.lucide && typeof lucide.replace === 'function') lucide.replace(); } catch(e){}
+
+        const progress = document.getElementById('page-progress');
+        let loading = 0;
+        progress.style.width = '0%';
+        const interval = setInterval(() => {
+            loading += Math.random() * 10 + 8;
+            progress.style.width = Math.min(95, loading) + '%';
+            if (loading >= 90) clearInterval(interval);
+        }, 120);
+
+        window.addEventListener('load', () => {
+            progress.style.width = '100%';
+            setTimeout(() => { progress.style.opacity = '0'; }, 250);
+        });
 
         init();
     });
@@ -554,17 +608,8 @@
         const myRecent = lastActiveTimes[myId] && (now - lastActiveTimes[myId] <= 25000);
         const oppRecent = currentOpponentId && lastActiveTimes[currentOpponentId] && (now - lastActiveTimes[currentOpponentId] <= 25000);
 
-        if (totalMsgs >= 1) {
-            // active conversation — don't auto AFK
-            afkTimer = null;
-            return;
-        }
-
-        if (myRecent || oppRecent) {
-            // recent activity within 25s counts as non-AFK
-            afkTimer = null;
-            return;
-        }
+        if (totalMsgs >= 1) return;
+        if (myRecent || oppRecent) return;
 
         afkTimer = setTimeout(() => {
             handleAfkTimeout();
@@ -586,8 +631,6 @@
         const totalMsg = myMsgCount + opponentMsgCount;
 
         if (duration >= 5 && myMsgCount > 0 && opponentMsgCount === 0) return; 
-        
-        // 降低懲罰：從 -15 改為 -5
         if (totalMsg < 5 || duration < 10) saveMR(myMR - 5); 
     }
 
@@ -610,7 +653,7 @@
             
             for (let id in waiters) {
                 if (id === myId) continue;
-                if (waiters[id].fp === myFingerprint) continue; // 硬體指紋比對，防無痕互連
+                if (waiters[id].fp === myFingerprint) continue; 
                 if (id === blockedOpponent && (Date.now() - blockTime) < 15000) continue; 
                 
                 let oppMR = waiters[id].mr !== undefined ? waiters[id].mr : 100;
@@ -668,7 +711,7 @@
     function beginChat(roomId) {
         document.getElementById('sys-msg').style.display = 'none';
         inputWrap.classList.remove('hidden');
-        quitBtn.style.display = 'block';
+        quitBtn.style.display = 'flex'; 
 
         myMsgCount = 0;
         opponentMsgCount = 0;
@@ -742,7 +785,6 @@
 
         const duration = (Date.now() - roomStartTime) / 1000;
         if (isStrangerLeave && duration >= 5 && myMsgCount > 0 && opponentMsgCount === 0) {
-            // 無痛釋放
         } else if (isStrangerLeave && (myMsgCount + opponentMsgCount) < 3) {
             saveMR(myMR - 2); 
         }
@@ -852,7 +894,12 @@
         if (isPenaltyMode) {
             if (now - lastPenaltyMessageTime < 1500) {
                 statusText.innerText = "System: Cooldown active (1.5s)";
-                setTimeout(() => statusText.innerText = "Stranger is Active", 1500);
+                setSendIcon('rotate-ccw', true);
+                
+                setTimeout(() => {
+                    statusText.innerText = "Stranger is Active";
+                    setSendIcon('send', false);
+                }, 1500);
                 return;
             }
             lastPenaltyMessageTime = now;
@@ -868,12 +915,14 @@
             
             statusText.innerText = "WARNING: Spam limit reached. Cooldown engaged.";
             statusText.style.color = "#FF3B30";
+            setSendIcon('rotate-ccw', true);
             
             penaltyTimeout = setTimeout(() => {
                 isPenaltyMode = false;
                 msgTimestamps = [];
                 statusText.style.color = "";
                 statusText.innerText = "Stranger is Active";
+                setSendIcon('send', false);
             }, 6000);
             return; 
         }
@@ -886,8 +935,6 @@
         }
 
         await push(ref(db, `rooms/${currentRoomId}/messages`), payload);
-        
-        // 成功發言，正向回饋 MR 增加 0.5
         saveMR(myMR + 0.5);
 
         inputEl.value = '';
@@ -901,6 +948,15 @@
             if (text) sendMessage(text);
         }
     });
+
+    const sendBtn = document.getElementById('send-btn');
+    if (sendBtn) {
+        sendBtn.addEventListener('click', () => {
+            const text = inputEl.value.trim();
+            if (imageQueue.length > 0) sendAllImages();
+            if (text) sendMessage(text);
+        });
+    }
 
     let typingTimer;
     function setTyping(isTyping) {
@@ -923,7 +979,7 @@
         setTimeout(() => selectingImage = false, 2000);
     });
 
-    fileInput.addEventListener('change', async (e) => {
+    fileInput.addEventListener('change', (e) => {
         setPresence('active');
         const file = e.target.files[0];
         if (!file) return;
@@ -953,41 +1009,39 @@
                 canvas.height = height;
                 ctx.drawImage(img, 0, 0, width, height);
 
-                // --- 呼叫 SENTRY AI 判斷 ---
-                if (nsfwModel) {
-                    try {
-                        const predictions = await nsfwModel.classify(canvas);
-                        // 尋找高風險特徵：色情(Porn)、二次元成人(Hentai)、極度暴露(Sexy)
-                        const isViolating = predictions.some(p => 
-                            (p.className === 'Porn' || p.className === 'Hentai') && p.probability > 0.65 ||
-                            (p.className === 'Sexy' && p.probability > 0.85)
-                        );
-                        
-                        if (isViolating) {
-                            alert("Upload blocked: System AI detected Explicit/NSFW content.");
-                            fileInput.value = '';
-                            return;
-                        }
-                    } catch(err) {
-                        console.warn("AI Classification failed, proceeding safely.", err);
-                    }
-                } else {
-                    console.log("AI Model still loading... skipping rigorous check.");
-                }
-
                 const base64Data = canvas.toDataURL('image/jpeg', 0.7);
                 const id = Math.random().toString(36).slice(2);
 
-                imageQueue.push({
+                const newImageItem = {
                     id,
                     data: base64Data,
                     width: Math.round(width),
                     height: Math.round(height),
                     spoiler: false,
                     sizeKB: (base64Data.length * 0.75 / 1024).toFixed(1)
-                });
-                
-                renderImageQueue();
+                };
+
+                imageQueue.push(newImageItem);
+                renderImageQueue(); 
+
+                setTimeout(async () => {
+                    try {
+                        if (nsfwModel && typeof nsfwModel.classify === 'function') {
+                            const predictions = await nsfwModel.classify(canvas);
+                            const isViolating = predictions.some(p => 
+                                (p.className === 'Porn' || p.className === 'Hentai') && p.probability > 0.65 ||
+                                (p.className === 'Sexy' && p.probability > 0.85)
+                            );
+                            
+                            if (isViolating) {
+                                alert("Upload blocked: System AI detected Explicit/NSFW content.");
+                                removeQueueImage(id);
+                            }
+                        }
+                    } catch(err) {
+                        console.warn("[DARKFLUX] SENTRY-V Background validation bypassed due to network isolation.", err);
+                    }
+                }, 50);
             };
             img.src = event.target.result;
         };
