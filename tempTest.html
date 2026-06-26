@@ -328,16 +328,16 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
     import { getDatabase, ref, push, onValue, set, onDisconnect, remove, get, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
 
-    // 【安全性提升】使用模組局部作用域與 IIFE 徹底封鎖 MR 變數，杜絕 Console 訪問
+    // 使用局部封閉範疇 IIFE 鎖死核心變數，防止外掛或開發者工具覆寫
     const [getMR, saveMR] = (() => {
-        let currentMR = 50.0; // 預設基礎值
+        let currentMR = 50.0;
         let localStorageAvailable = true;
         
         try {
             const stored = localStorage.getItem('anon_mr');
             if (stored !== null) {
                 let parsed = parseFloat(stored);
-                // 【核心要求】將所有大於 51 點的存檔，強制恢復調校至 50.0 
+                // 【核心指令】MR > 51 分的用戶存檔，強制在載入時調校校準至基础值 50.0 點
                 if (parsed > 51.0) {
                     currentMR = 50.0;
                     localStorage.setItem('anon_mr', '50.0');
@@ -354,7 +354,6 @@
         return [
             () => currentMR,
             (val) => {
-                // 平衡性限制：落點於 0~100
                 currentMR = Math.max(0, Math.min(100, val));
                 if (localStorageAvailable) {
                     try { localStorage.setItem('anon_mr', currentMR.toFixed(1)); } catch (e) {}
@@ -364,7 +363,7 @@
         ];
     })();
 
-    // 全域僅提供唯讀界面呈現，Console 嘗試覆寫 mrShow 將不影響實際底層運行分數
+    // 全域僅暴露唯讀界面，Console 端隨意修改 window.mrShow 也不影響底層配對運算
     Object.defineProperty(window, 'mrShow', {
         get: () => getMR().toFixed(1),
         configurable: false
@@ -643,7 +642,7 @@
 
         if (duration >= 5 && myMsgCount > 0 && opponentMsgCount === 0) return; 
         
-        // 【平衡優化】降低秒退懲罰：原扣 5 點，下調至扣 1.5 點，防止 MR 跌速過快
+        // 【平衡平衡修正】秒退惩罚平缓化，降低跌幅速（從 5.0 下調至 1.5 點）
         if (totalMsg < 5 || duration < 10) saveMR(getMR() - 1.5); 
     }
 
@@ -670,7 +669,6 @@
                 if (id === blockedOpponent && (Date.now() - blockTime) < 15000) continue; 
                 
                 let oppMR = waiters[id].mr !== undefined ? waiters[id].mr : 50;
-                // 機制配合：以 50 分左右作為彈性對手撮合
                 if (Math.abs(getMR() - oppMR) <= 25) { 
                     matchedId = id;
                     break;
@@ -799,11 +797,10 @@
 
         const duration = (Date.now() - roomStartTime) / 1000;
         
-        // 【平衡優化】優化對手斷線時的補償與懲罰結構
+        // 【平衡優化】降低非正常退出對局時的扣分（從 2.0 降至 0.5 點）
         if (isStrangerLeave && duration >= 5 && myMsgCount > 0 && opponentMsgCount === 0) {
-            // 正常互動
         } else if (isStrangerLeave && (myMsgCount + opponentMsgCount) < 3) {
-            saveMR(getMR() - 0.5); // 緩和扣分幅度（從 2 下調至 0.5）
+            saveMR(getMR() - 0.5); 
         }
 
         sessionStorage.removeItem('anon_roomId');
@@ -953,7 +950,7 @@
 
         await push(ref(db, `rooms/${currentRoomId}/messages`), payload);
         
-        // 【平衡優化】加速正常互動的回分速度：將單條訊息加分由原 0.5 大幅提升至 1.5 點
+        // 【平衡優化】大幅拉高互動時的回分增益，從 0.5 點大幅提升至 1.5 點
         saveMR(getMR() + 1.5);
 
         inputEl.value = '';
